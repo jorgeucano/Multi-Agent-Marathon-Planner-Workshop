@@ -728,15 +728,16 @@ print(f"  base = google.colab.kernel.proxyPort({ADK_PORT})")
 print(f"       = {base}")
 print(f"  url  = base + '{UI_PATH}'")
 print(f"\n  {url}\n")
-display(HTML(f'<p style="font-size:1.2em"><a href="{url}" target="_blank">🔗 Abrir la ADK Dev UI en otra pestaña</a></p>'))
+print("(esa URL sirve para entender el mecanismo; para USAR la UI, mirá el iframe de abajo)")
 
-# La forma oficial de Colab: abre la pestaña con la URL firmada correcta.
-print("Abriendo también con output.serve_kernel_port_as_window(...)")
-print("(si el navegador bloquea el popup, usá el link de arriba)")
-output.serve_kernel_port_as_window(ADK_PORT, path=UI_PATH)
-
-print("\nEn la UI: agente `planner_agent` → escribí el pedido → panel Events.")
-print("Solo abre con la MISMA cuenta de Google que corre este notebook.")
+# IMPORTANTE: abrir en PESTAÑA NUEVA no funciona. El HTML carga, pero el proxy
+# de Colab devuelve 403 en los chunks de JavaScript (las sub-peticiones no
+# llevan la autenticación de la sesión) y ves una página en blanco con cuatro
+# errores 403 en la consola. Es la razón por la que serve_kernel_port_as_window
+# está deprecada. El iframe corre dentro del contexto autenticado del notebook
+# y sí carga. Ver docs/GOTCHAS.md #21.
+print("\nLa UI, acá abajo (agente `planner_agent` → escribí el pedido → panel Events):")
+output.serve_kernel_port_as_iframe(ADK_PORT, path=UI_PATH, height="700")
 """)
 
 # ---------------------------------------------------------------------------
@@ -815,6 +816,92 @@ for linea in sim.splitlines()[-25:]:
     if linea.strip():
         print(" ", linea.strip()[:150])
 ''')
+
+md(r"""
+### 4.3 — La coreografía completa, evento por evento
+
+Las celdas anteriores te dieron el resultado y el log. Esta te da **la película**: manda el pedido por la API de `adk web` y dibuja cada evento en orden, con quién lo originó y cuánto tardó.
+
+Es la vista que cierra el workshop, porque hace visible lo único que no se ve en el texto final: que hubo **tres agentes distintos**, que el Evaluator corrió *dentro* del proceso del Planner y que el Simulator contestó *por HTTP*. En la salida vas a poder señalar con el dedo el momento exacto en que el Planner deja de trabajar y delega.
+
+> Necesita la celda 3.4 corrida (la UI levantada en el :8000).
+""")
+
+code(r"""
+# @title 4.3 — La coreografía completa, evento por evento { display-mode: "form" }
+
+import json, time
+import httpx
+from IPython.display import HTML, display
+
+PEDIDO = "Plan a scenic marathon in Buenos Aires for 30,000 runners. Send it to the evaluator and then to the simulation controller, and report the scores and the verdict."  # @param {type:"string"}
+
+BASE = f"http://127.0.0.1:{ADK_PORT}"
+sid = httpx.post(f"{BASE}/apps/planner_agent/users/user/sessions", json={}, timeout=30).json()["id"]
+print(f"session: {sid}\nmandando el pedido... (~1 min)\n")
+
+COLOR = {"planner_agent": "#FF6B35", "evaluator_agent": "#0077B6", "simulator_agent": "#2A9D8F"}
+DONDE = {
+    "list_skills": ("Skill", "en proceso"), "load_skill": ("Skill", "en proceso"),
+    "plan_marathon_route": ("Tool", "en proceso · Dijkstra, sin LLM"),
+    "add_water_stations": ("Tool", "en proceso · calculado"),
+    "add_medical_tents": ("Tool", "en proceso · calculado"),
+    "evaluator_agent": ("AgentTool", "MISMO proceso · 6 jueces LLM + 1 regex"),
+    "simulator_agent": ("RemoteA2aAgent", "OTRO proceso · HTTP al :8089"),
+}
+
+filas, t0, final = [], time.time(), ""
+with httpx.stream("POST", f"{BASE}/run_sse", timeout=900, json={
+    "app_name": "planner_agent", "user_id": "user", "session_id": sid,
+    "new_message": {"role": "user", "parts": [{"text": PEDIDO}]}, "streaming": False,
+}) as resp:
+    for linea in resp.iter_lines():
+        if not linea.startswith("data:"):
+            continue
+        ev = json.loads(linea[5:])
+        t = time.time() - t0
+        for parte in (ev.get("content") or {}).get("parts", []):
+            if "functionCall" in parte:
+                n = parte["functionCall"]["name"]
+                tipo, donde = DONDE.get(n, ("Tool", ""))
+                filas.append((t, ev.get("author", "?"), "llama", n, tipo, donde))
+                print(f"  [{t:5.1f}s] → {n}")
+            elif "functionResponse" in parte:
+                n = parte["functionResponse"]["name"]
+                filas.append((t, ev.get("author", "?"), "responde", n, "", ""))
+            elif parte.get("text"):
+                final = parte["text"]
+                filas.append((t, ev.get("author", "?"), "responde al usuario", "", "", f"{len(final)} caracteres"))
+
+total = time.time() - t0
+print(f"\n{len(filas)} eventos en {total:.0f}s\n")
+
+html = ['<div style="font-family:system-ui;max-width:900px">',
+        f'<h3 style="margin:0 0 4px">Una corrida completa · {len(filas)} eventos · {total:.0f}s</h3>',
+        '<table style="border-collapse:collapse;width:100%;font-size:13px">']
+for t, autor, verbo, nombre, tipo, donde in filas:
+    c = COLOR.get(autor, "#888")
+    destacar = "font-weight:700" if tipo in ("AgentTool", "RemoteA2aAgent") else ""
+    html.append(
+        f'<tr style="border-bottom:1px solid #eee">'
+        f'<td style="padding:6px 10px;color:#999;white-space:nowrap">{t:5.1f}s</td>'
+        f'<td style="padding:6px 10px"><span style="background:{c};color:#fff;padding:2px 8px;'
+        f'border-radius:10px;white-space:nowrap">{autor}</span></td>'
+        f'<td style="padding:6px 10px;color:#666">{verbo}</td>'
+        f'<td style="padding:6px 10px;{destacar}">{nombre}</td>'
+        f'<td style="padding:6px 10px;color:#666">{tipo}</td>'
+        f'<td style="padding:6px 10px;color:#888">{donde}</td></tr>')
+html.append('</table><p style="color:#666;font-size:13px;margin-top:10px">'
+            'Las dos filas en negrita son la clase entera: <b>evaluator_agent</b> corre dentro de este '
+            'mismo proceso (AgentTool) y <b>simulator_agent</b> vive en otro, alcanzado por A2A sobre '
+            'HTTP. El Planner los llama igual: no sabe dónde están.</p></div>')
+display(HTML("".join(html)))
+
+print("=" * 70)
+print("PLAN FINAL")
+print("=" * 70)
+print(final)
+""")
 
 # ---------------------------------------------------------------------------
 # Paso 5 — Romperlo

@@ -308,9 +308,19 @@ API key. **Here:** Esri World Street Map, no key, no block.
 subdomain (`https://8000-m-s-<hash>.<region>.prod.colab.dev`). Copying one from
 a tutorial gives `DNS_PROBE_FINISHED_NXDOMAIN`. Ask for it at runtime with
 `google.colab.kernel.proxyPort(8000)` — and mind the trailing slash, or you get
-`colab.devdev-ui`. The notebook's cell 3.4 starts the server with
-`--host 0.0.0.0`, health-checks `/list-apps` from inside the VM first, prints
-how the URL is built, and also calls `output.serve_kernel_port_as_window`.
+`colab.devdev-ui`.
+
+**And opening it in a new tab does not work either.** The HTML loads, then every
+JavaScript chunk comes back `403`: the proxy does not authenticate sub-resource
+requests made outside the notebook's context, so you get a blank page and four
+403s in the console. That is why `serve_kernel_port_as_window` is deprecated
+("Try `serve_kernel_port_as_iframe` instead" — Colab says so itself).
+
+**Here:** cell 3.4 starts the server with `--host 0.0.0.0`, health-checks
+`/list-apps` from inside the VM first (so a server problem is never mistaken for
+a proxy problem), prints how the signed URL is built for teaching purposes, and
+renders the UI with `output.serve_kernel_port_as_iframe` — the iframe runs in
+the notebook's authenticated context and loads.
 
 ## C. Known limitations of this repo
 
