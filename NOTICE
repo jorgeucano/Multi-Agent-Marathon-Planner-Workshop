@@ -1,0 +1,16 @@
+marathon-agents
+===============
+
+This repository is a runnable reconstruction of the Google Codelab
+"Build a Multi-Agent Marathon Planner with ADK and A2A" (Next '26 Developer
+Keynote track):
+
+  https://codelabs.developers.google.com/next26/dev-keynote/build-multi-agent-marathon-planner
+
+Code samples from that codelab are licensed under the Apache License 2.0;
+the codelab prose is licensed under CC BY 4.0. Copyright of the original
+material belongs to Google LLC.
+
+Files NOT present in the codelab and written for this repository (so that the
+system actually runs end to end) are marked with a header comment reading
+"NOT IN THE CODELAB". See docs/GOTCHAS.md for the full list and rationale.
