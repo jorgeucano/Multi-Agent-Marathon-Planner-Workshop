@@ -217,7 +217,11 @@ if not REPO_URL:
 if not os.path.isdir(REPO_DIR):
     !git clone --branch {BRANCH} --depth 1 {REPO_URL} {REPO_DIR}
 else:
-    print(f"{REPO_DIR} ya existe, no vuelvo a clonar.")
+    # Si ya existe, ACTUALIZARLO. Saltear esto es una trampa silenciosa: seguís
+    # corriendo el código de la primera vez que clonaste y no hay ninguna señal.
+    # fetch + reset (no pull): la historia del repo puede haber sido reescrita.
+    print(f"{REPO_DIR} ya existe → actualizando a origin/{BRANCH}")
+    !cd {REPO_DIR} && git fetch --tags --force origin && git reset --hard origin/{BRANCH}
 
 assert os.path.isdir(REPO_DIR), "El clone falló. Revisá la URL y que el repo sea público."
 
@@ -232,6 +236,19 @@ with open(".env", "w") as f:
 print("✓ .env escrito:\n")
 !cat .env
 print()
+
+# Qué versión del código estás corriendo, para que nunca sea una sorpresa.
+print("Commit:")
+!git log --oneline -1
+print()
+
+# Si ya importaste los módulos del repo (celdas 1.x) ANTES de actualizar, Python
+# tiene la versión vieja en memoria: reiniciá la sesión y volvé a correr.
+import sys
+if any(m.startswith("src.") for m in sys.modules):
+    print("⚠️  Ya habías importado módulos del repo en esta sesión.")
+    print("   Si el commit de arriba cambió: Entorno de ejecución → Reiniciar sesión,")
+    print("   y volvé a correr desde la celda 0.1.\n")
 
 # Un tag de git por paso del codelab: si alguien se queda atrás, salta acá.
 !git tag -l

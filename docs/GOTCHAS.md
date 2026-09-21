@@ -322,6 +322,19 @@ a proxy problem), prints how the signed URL is built for teaching purposes, and
 renders the UI with `output.serve_kernel_port_as_iframe` — the iframe runs in
 the notebook's authenticated context and loads.
 
+### 22. "Already cloned, skipping" is a silent trap
+
+The obvious way to write the clone step is `if not isdir(repo): clone`. On the
+second run of a Colab session — or after any push — that keeps the code from the
+**first** clone, with no output saying so beyond a cheerful "already exists".
+You then debug bugs that were fixed hours ago. It cost us a full round trip.
+
+**Here:** cell 0.3 does `git fetch --tags --force && git reset --hard origin/main`
+when the directory exists (fetch+reset, not `pull`: the history may have been
+rewritten), prints the commit it ended up on, and warns if `src.*` modules were
+already imported in this session — because updating files on disk does nothing
+for a module Python has already cached. Restart the runtime in that case.
+
 ## C. Known limitations of this repo
 
 - The road networks in `route-planning/tools.py` are hand-built, not OSM. The
