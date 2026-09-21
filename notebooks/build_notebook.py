@@ -403,9 +403,14 @@ print("\n→ Mismo código, mismo schema de salida. Solo cambia de dónde salen 
 ''')
 
 code(r'''
-# @title 1.4 — Ahora el juez de verdad: Vertex AI Eval (~30-90 s) { display-mode: "form" }
-# Este es el mismo plan, pero puntuado por 7 métricas LLM-as-Judge reales.
-# Mientras corre: contá qué está pasando. Son 7 llamadas al juez.
+# @title 1.4 — Ahora el juez de verdad: Vertex AI Eval { display-mode: "form" }
+# El mismo plan, puntuado por las 7 métricas reales: 6 con juez LLM y una
+# determinística (la distancia, que es una regex). Con flash-lite tarda
+# unos segundos; con el gemini-3.1-pro-preview del codelab, 1-3 minutos.
+#
+# Lo que tenés que mirar: que los scores sean DISTINTOS entre sí. Seis 50.0
+# y un overall de 52.5 significa que los jueces fallaron y alguien los
+# reemplazó por un 50 (el bug del codelab, docs/GOTCHAS.md #17 y #18).
 
 import os, time, json
 
@@ -430,9 +435,15 @@ for f in r["findings"]:
     print(f"  {f['description'][:400]}")
 
 if r["eval_method"] == "heuristic":
-    print("\n⚠️  Cayó al fallback. Mirá el log de arriba: suele ser cuota, región")
-    print("   o un modelo que se movió. Para el workshop no es un drama:")
-    print("   el sistema siguió respondiendo. Eso es el punto.")
+    print("\n⚠️  Cayó al fallback heurístico. Mirá el WARNING de arriba: puede ser")
+    print("   cuota, región, o un juez que no devolvió JSON parseable.")
+    print("   Para el workshop no es un drama: el sistema siguió respondiendo.")
+    print("   Eso es exactamente el punto de la evaluación híbrida.")
+else:
+    distintos = len(set(r["scores"].values()))
+    print(f"\n✓ {distintos} valores distintos entre 7 criterios.")
+    if distintos <= 2:
+        print("  ⚠️  Sospechoso: si ves seis 50.0, los jueces fallaron en silencio.")
 ''')
 
 # ---------------------------------------------------------------------------
