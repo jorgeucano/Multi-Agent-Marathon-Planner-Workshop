@@ -177,12 +177,26 @@ ADK prints `[EXPERIMENTAL]` warnings for three things this system depends on:
 They work, but expect breaking changes between ADK minors — one more reason the
 lock file matters.
 
-### 11. Preview models
+### 11. The codelab's models 404 in the codelab's own region
 
-`gemini-3.1-pro-preview` (judge) and `gemini-3-flash-preview`. Fresh projects
-often have low or zero preview quota, and availability is regional. Check the
-morning of; `PLANNER_MODEL` / `EVALUATOR_MODEL` / `SIMULATOR_MODEL` are the
-escape hatch. `scripts/preflight.py` pings all three.
+**Verified 2026-09-21** on a project with billing and Vertex AI enabled:
+
+| Model | `us-central1` (codelab `.env`) | `global` |
+|---|---|---|
+| `gemini-3-flash-preview` | **404** | OK |
+| `gemini-3.1-pro-preview` | **404** | OK |
+| `gemini-3.1-flash-lite` | **404** | OK |
+| `gemini-2.5-flash` / `-pro` / `-flash-lite` | OK | OK |
+
+Every Gemini 3.x model is served from `location=global`. The codelab hard-codes
+`GOOGLE_CLOUD_LOCATION=us-central1`, so a fresh follower gets three 404s at the
+first model call — after 40 minutes of setup. `scripts/preflight.py` pings all
+three models and fails here, before anything else.
+
+**Here:** `.env.example` uses `global` and `gemini-3.1-flash-lite` for all
+three agents. Full Team run completes in ~57 s with it. The preview pair from
+the codelab also works in `global` if you want fidelity — the `pro` judge is
+slower and pricier.
 
 ### 12. The Evaluator is the slow part
 
