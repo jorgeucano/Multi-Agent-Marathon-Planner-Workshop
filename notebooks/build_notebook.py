@@ -84,7 +84,7 @@ Modelo: `gemini-3.1-flash-lite` en los tres (elegible en el Paso 0.2). El codela
 | `gcloud auth application-default login` en la laptop | `auth.authenticate_user()`, una celda |
 | Dos terminales de Cloud Shell | Dos procesos en la misma VM, `localhost` |
 | `uv sync` en el wifi del evento | `pip install` en la VM de Google |
-| La prueba final es un `curl` al agent card | Pedido real + traza de 17 eventos + mapa de la ruta |
+| La prueba final es un `curl` al agent card | Pedido real + **ADK Dev UI** con la traza + mapa de la ruta |
 
 ### Ruta del workshop
 
@@ -93,7 +93,7 @@ Modelo: `gemini-3.1-flash-lite` en los tres (elegible en el Paso 0.2). El codela
 | 0 | Setup: auth, proyecto, dependencias, repo | ~4 min |
 | 1 | El Evaluator: 7 criterios y cómo puntúa | ~8 min |
 | 2 | La ruta: Dijkstra sobre la red vial + mapa | ~8 min |
-| 3 | Levantar los 3 agentes y conectarlos por A2A | ~10 min |
+| 3 | Levantar los 3 agentes, conectarlos por A2A y abrir la **ADK Dev UI** | ~12 min |
 | 4 | El pedido real end-to-end (~1 min de corrida) | ~10 min |
 | 5 | Matar Vertex AI Eval en vivo (fallback híbrido) | ~5 min |
 
@@ -663,6 +663,37 @@ else:
 print("=" * 60)
 ''')
 
+code(r"""
+# @title 3.4 — La UI: ADK Dev UI dentro de Colab { display-mode: "form" }
+# `adk web` es la interfaz de desarrollo de ADK: un chat con el agente y, al
+# lado, la traza de cada tool call, del sub-agente Evaluator y del salto A2A al
+# Simulator. El codelab no la menciona. Corre en la VM y Colab la proxea.
+
+import os, shutil, subprocess, sys, time
+from google.colab.output import eval_js
+from IPython.display import HTML, IFrame, display
+
+ADK_PORT = 8000
+adk_env = {**os.environ, "SIMULATOR_AGENT_RESOURCE_NAME": "local:8089", "PYTHONUNBUFFERED": "1"}
+adk_cmd = [shutil.which("adk") or sys.executable, *([] if shutil.which("adk") else ["-m", "google.adk.cli"]),
+           "web", "--port", str(ADK_PORT), "src"]
+
+adkweb = subprocess.Popen(
+    adk_cmd, cwd=REPO_DIR, env=adk_env,
+    stdout=open(f"{LOGS}/adkweb.log", "w"), stderr=subprocess.STDOUT,
+)
+print(f"ADK Dev UI arrancando (pid {adkweb.pid})...")
+if esperar_puerto(ADK_PORT, "ADK Dev UI", f"{LOGS}/adkweb.log", segundos=120):
+    base = eval_js(f"google.colab.kernel.proxyPort({ADK_PORT})")
+    url = f"{base}dev-ui/?app=planner_agent"
+    print("\nURL de la UI (misma cuenta de Google, otra pestaña):\n  " + url)
+    display(HTML(f'<p style="font-size:1.2em"><a href="{url}" target="_blank">🔗 Abrir la ADK Dev UI en otra pestaña</a></p>'))
+    print("Si tu navegador bloquea el popup, usá el link de arriba.")
+    print("En la UI: agente `planner_agent` → escribí el pedido → mirá el panel Events.")
+    print("\nTambién embebida acá abajo (si tu navegador lo permite):")
+    display(IFrame(url, width="100%", height=650))
+""")
+
 # ---------------------------------------------------------------------------
 # Paso 4 — Pedido real
 # ---------------------------------------------------------------------------
@@ -859,15 +890,17 @@ Corré la última celda antes de cerrar: si no, los dos servidores quedan vivos 
 code(r'''
 # @title Limpieza — apagar los dos servidores { display-mode: "form" }
 
-for proc, nombre in [(planner, "Planner"), (simulador, "Simulator")]:
+for proc, nombre in [(planner, "Planner"), (simulador, "Simulator"), (globals().get("adkweb"), "ADK Dev UI")]:
     frenar(proc, nombre)
 
 !pkill -f "src.planner_agent.runtime.local_server" 2>/dev/null
 !pkill -f "src.simulator_agent.runtime.local_server" 2>/dev/null
+!pkill -f "adk.*web" 2>/dev/null
 
 import time
 time.sleep(1)
 print(f"\nPuerto 8084 vivo: {puerto_vivo(8084)}")
+print(f"Puerto 8000 vivo: {puerto_vivo(8000)}")
 print(f"Puerto 8089 vivo: {puerto_vivo(8089)}")
 print("\nNo hay nada más que borrar: este workshop no crea recursos persistentes")
 print("en Google Cloud (ni Cloud Run, ni Agent Engine). Solo llamadas a la API.")
