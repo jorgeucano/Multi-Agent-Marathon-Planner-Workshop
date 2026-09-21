@@ -1,0 +1,17 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Offline suite (no GCP credentials needed)
+        run: |
+          uv run --no-project --with pytest \
+            python -m pytest tests/test_route_planning.py tests/test_readiness_check.py -q
