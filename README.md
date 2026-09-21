@@ -57,6 +57,18 @@ uv run python -m src.planner_agent.runtime.local_server
 uv run python scripts/send_request.py --city "Las Vegas" --participants 30000 --watch
 ```
 
+### The visual demo — `adk web`
+
+```bash
+uv run python -m src.simulator_agent.runtime.local_server        # terminal 1
+make web                                                          # terminal 2 -> http://127.0.0.1:8000
+```
+
+ADK's dev UI: pick `planner_agent`, type the request, and watch the event
+trace on the right — every `plan_marathon_route` call, the `evaluator_agent`
+sub-agent, and the A2A hop to `simulator_agent`. This is the part the room
+should see; the codelab never mentions it.
+
 ### Full Team mode — all three agents over A2A
 
 ```bash

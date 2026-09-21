@@ -26,28 +26,33 @@ Attendee prerequisites, in one message:
 
 ---
 
-## 90-minute cut
+## 60-minute runsheet
 
-Attendees start from `git checkout step-4-simulator` — the Evaluator and the
-Simulator are given. They **write the Planner and the A2A wiring**, which is
-where the actual lesson lives.
+Attendees do **not** type code. Sixty minutes is enough to understand the
+system and see it run; it is not enough to build it. They follow along in the
+repo (or the Colab), you drive. Everything that costs minutes of silence has a
+pre-warmed fallback.
 
-| Min | Block | You do | They do |
+| Min | Block | What happens on screen | Fallback |
 |---:|---|---|---|
-| 0–5 | Framing | The three agents, why not one prompt | — |
-| 5–10 | Preflight | Run preflight on the projector | Run preflight; you triage |
-| 10–20 | The Evaluator, read-only | Walk `MetricPromptBuilder`, the 7 metrics, the rubric scores | Read `evaluator/tools.py` |
-| 20–30 | Judges are expensive | Run with `EVAL_MODE=heuristic`, then real. Show the hybrid fallback | Watch |
-| 30–45 | Write the Planner | Live-code `agent/tools.py` `get_tools()` | Type along |
-| 45–55 | Solo mode | Start planner, `send_request.py` | Same |
-| 55–70 | A2A | Start the simulator, restart planner **with the env var**, show both log lines | Same |
-| 70–80 | Full run | One end-to-end plan on the projector | Their own city |
-| 80–90 | Close | ThinkingConfig per task, Memory Bank in production, cleanup | Questions |
+| 0-4 | Framing | Three agents, one request. Why not one prompt. | — |
+| 4-8 | The bug that teaches | `git tag -l`, then GOTCHAS #2: the tool the codelab calls but never writes. "A missing tool looks like a hallucination, not an error." | — |
+| 8-18 | The Evaluator | `evaluator/tools.py`: one `MetricPromptBuilder` on screen. Then `tests/test_evaluator_scoring.py::test_high_severity_finding_blocks_a_pass` — 95 average, still fails. | Offline, always works |
+| 18-26 | The route | `plan_marathon_route("Las Vegas")` in a REPL: waypoints, closure severity, 42.195 km with the adjustment stated. | Offline |
+| 26-34 | Wiring | `agent/tools.py::get_tools()`: SkillToolset / AgentTool / RemoteA2aAgent side by side. Start the simulator, `curl` its agent card. | — |
+| 34-40 | One env var | Start the planner **without** the var (banner: `SOLO`), Ctrl+C, start **with** it (banner: `FULL TEAM`, 7 tools). | — |
+| 40-52 | The run | `make web` -> ADK dev UI. Type the request. Narrate the event trace while the Evaluator thinks (1-3 min). | `EVAL_MODE=heuristic` run pre-started in another tab; switch if the judge stalls past 3 min |
+| 52-57 | Break it | Kill the simulator, resend. What the planner does is in its *instruction*, not its code. | Skip if late |
+| 57-60 | Close | ThinkingConfig per task. Memory Bank is **not** demonstrated — say so. Repo + Colab link. | — |
 
-**If you are short on time, cut in this order:** Memory Bank discussion → the
-custom executor → the second Full Team run.
+**Cut order if you run late:** 52-57 first, then compress 18-26 to a single
+slide of output.
 
-## Full version (three hours, with a break)
+**Pre-warm before the room opens:** `uv sync` done, ADC valid, simulator
+running, one full request already completed once today (model cold starts and
+quota surprises happen on the *first* call, not the tenth).
+
+## Extended version (90 min - 3 h)
 
 Steps 0–3 before the break (scaffold, services, Evaluator), 4–6 after
 (Simulator, Planner, A2A). Same runsheet, each block roughly doubled, with a

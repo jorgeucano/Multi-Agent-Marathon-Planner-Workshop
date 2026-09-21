@@ -18,6 +18,9 @@ planner-full:  ## start the Planner in Full Team mode (needs the simulator up)
 simulator:  ## start the Simulation Controller (:8089)
 	uv run python -m src.simulator_agent.runtime.local_server
 
+web:  ## ADK dev UI: chat with the planner and watch every tool/A2A call (http://127.0.0.1:8000)
+	SIMULATOR_AGENT_RESOURCE_NAME=local:8089 uv run adk web --port 8000 src
+
 demo:  ## send a real request over A2A
 	uv run python scripts/send_request.py --city "Las Vegas" --participants 30000 --watch
 
