@@ -56,7 +56,7 @@ uv run python scripts/preflight.py          # fails here, not on stage
 ```bash
 uv run python -m src.planner_agent.runtime.local_server
 # second terminal:
-uv run python scripts/send_request.py --city "Las Vegas" --participants 30000 --watch
+uv run python scripts/send_request.py --city "Buenos Aires" --participants 30000 --watch
 ```
 
 ### The visual demo — `adk web`

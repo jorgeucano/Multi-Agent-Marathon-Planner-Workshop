@@ -9,6 +9,7 @@ AGENT_DESCRIPTION = (
     "traffic management, community impact, and economics. Evaluates plans via the "
     "Evaluator Agent (A2A) and submits for approval to the Simulation Controller (A2A)."
 )
-MODEL = os.getenv("PLANNER_MODEL", "gemini-3-flash-preview")
+# Rehearsed default. The codelab's gemini-3-flash-preview also works, but only in location=global.
+MODEL = os.getenv("PLANNER_MODEL", "gemini-3.1-flash-lite")
 # Phase 1: No structured output - agent returns free-form text
 OUTPUT_SCHEMA = None

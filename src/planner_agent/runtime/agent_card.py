@@ -31,7 +31,7 @@ def create_marathon_planner_card() -> AgentCard:
         ),
         tags=["marathon", "planning", "orchestration", "multi-agent"],
         examples=[
-            "Plan a scenic marathon through Las Vegas for 30,000 runners",
+            "Plan a scenic marathon through Buenos Aires for 30,000 runners",
             "Design a charity marathon in Austin for October 2026",
         ],
     )

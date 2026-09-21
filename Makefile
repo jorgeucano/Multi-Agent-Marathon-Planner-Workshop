@@ -22,10 +22,10 @@ web:  ## ADK dev UI: chat with the planner and watch every tool/A2A call (http:/
 	SIMULATOR_AGENT_RESOURCE_NAME=local:8089 uv run adk web --port 8000 src
 
 demo:  ## send a real request over A2A
-	uv run python scripts/send_request.py --city "Las Vegas" --participants 30000 --watch
+	uv run python scripts/send_request.py --city "Buenos Aires" --participants 30000 --watch
 
 demo-fast:  ## same, but force the heuristic evaluator (no LLM judges)
-	EVAL_MODE=heuristic uv run python scripts/send_request.py --city "Las Vegas" --participants 30000 --watch
+	EVAL_MODE=heuristic uv run python scripts/send_request.py --city "Buenos Aires" --participants 30000 --watch
 
 test:  ## full test suite
 	uv run --extra dev pytest -q

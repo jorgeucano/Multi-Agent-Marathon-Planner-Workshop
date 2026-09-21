@@ -6,7 +6,7 @@ the agent card - it never sends a message, so the three agents never actually
 talk. This is the client that makes the demo a demo.
 
 Usage:
-    uv run python scripts/send_request.py --city "Las Vegas" --participants 30000
+    uv run python scripts/send_request.py --city "Buenos Aires" --participants 30000
     uv run python scripts/send_request.py --city Austin --theme charity --watch
 """
 
@@ -125,7 +125,7 @@ async def send(base_url: str, prompt: str, timeout: float, watch: bool) -> int:
 
 def main() -> int:
     p = argparse.ArgumentParser(description="Send a marathon plan request over A2A.")
-    p.add_argument("--city", default="Las Vegas")
+    p.add_argument("--city", default="Buenos Aires")
     p.add_argument("--participants", type=int, default=30000)
     p.add_argument("--theme", default="scenic")
     p.add_argument("--date", default="")

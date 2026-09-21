@@ -231,6 +231,87 @@ run it before arriving.
 
 ---
 
+### 17. A failed judge is scored 50, and the run is still called "vertex_ai_eval"
+
+In `_run_custom_eval` the codelab does:
+
+```python
+raw_score = metric_result.score if ... metric_result.score is not None else 50.0
+```
+
+So when a judge metric fails, it becomes a 50. When **six** fail (see #18), the
+result is `overall_score: 52.5` (six 50s plus the deterministic distance check
+at 100), labelled `eval_method: "vertex_ai_eval"`. It looks like a mediocre
+plan. It is actually a broken evaluator. We shipped that number in a rehearsal
+before noticing.
+
+**Here:** a metric with no score is recorded as failed and `_run_custom_eval`
+raises, so `evaluate_plan` falls back to the heuristic path **and says so** in
+`eval_method`. Fifty is never invented.
+
+### 18. `MetricPromptBuilder` output does not parse — with any judge model
+
+**Verified 2026-09-21**, aiplatform 1.165.1, judges tried: `gemini-3.1-flash-lite`,
+`gemini-2.5-flash`, `gemini-3-flash-preview`, `gemini-3.1-pro-preview` (the
+codelab's own). Every LLM metric fails identically:
+
+```
+400 INVALID_ARGUMENT: Error parsing JSON. Expecting property name enclosed in
+double quotes ... Input: {### Evaluation  **Step 1: Assessment ...
+```
+
+The template `str(MetricPromptBuilder(...))` ends with *"Step 1: Assess the
+response ... Step 2: Score based on the Rating Scores. Give a brief rationale"*
+— it asks for prose. The Evaluation service then tries to parse the judge's
+prose as JSON. Setting `response_mime_type="application/json"` on the judge does
+**not** help. `return_raw_output=True` is rejected by the API
+(`Unknown name "custom_output_format_config"`), and `result_parsing_function`
+takes a string, not a callable.
+
+**What works:** `judge_model_system_instruction` telling the judge to answer
+with exactly `{"score": <int>, "explanation": "<text>"}`. Scores and
+explanations come back for all six metrics. Applied to every metric in
+`evaluator/tools.py` as `JUDGE_SYSTEM_INSTRUCTION`.
+
+For the room: this is the best five minutes of the workshop. "LLM-as-Judge" is
+not a prompt, it is a contract between three parties — the rubric, the model,
+and the parser — and the codelab only wrote two of them.
+
+### 19. The Evaluator truncates its own structured output
+
+Once the judges actually return (see #18), each one ships a paragraph of
+`explanation`. The agent has to copy all seven into `EvaluationResult`, which
+overruns the codelab's `max_output_tokens=4096`. The JSON arrives cut off and
+Pydantic rejects it:
+
+```
+1 validation error for EvaluationResult
+  Invalid JSON: EOF while parsing an object at line 5 column 16244
+```
+
+The A2A task then fails with a generic `Planning failed`, which looks like an
+A2A problem and is not.
+
+**Here:** findings are capped at `MAX_FINDING_CHARS = 400` in `_build_result`
+and `max_output_tokens` is 8192. Note the ordering: this bug is *invisible*
+until #18 is fixed, because a broken judge returns no explanation to copy.
+
+### 20. OpenStreetMap tiles are blocked from Colab
+
+`folium.Map(tiles="OpenStreetMap")` renders a wall of `403 Access blocked - App
+is not following the tile usage policy` from a Colab VM. CartoDB now requires an
+API key. **Here:** Esri World Street Map, no key, no block.
+
+### 21. The Colab port-proxy URL cannot be written down
+
+`adk web` inside Colab is reachable only through a per-session, per-user signed
+subdomain (`https://8000-m-s-<hash>.<region>.prod.colab.dev`). Copying one from
+a tutorial gives `DNS_PROBE_FINISHED_NXDOMAIN`. Ask for it at runtime with
+`google.colab.kernel.proxyPort(8000)` — and mind the trailing slash, or you get
+`colab.devdev-ui`. The notebook's cell 3.4 starts the server with
+`--host 0.0.0.0`, health-checks `/list-apps` from inside the VM first, prints
+how the URL is built, and also calls `output.serve_kernel_port_as_window`.
+
 ## C. Known limitations of this repo
 
 - The road networks in `route-planning/tools.py` are hand-built, not OSM. The

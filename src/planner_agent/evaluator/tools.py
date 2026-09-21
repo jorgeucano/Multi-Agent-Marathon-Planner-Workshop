@@ -31,6 +31,19 @@ def _get_model_resource() -> str:
     )
 
 
+# DEVIATION FROM THE CODELAB (docs/GOTCHAS.md #18). The prompt that
+# MetricPromptBuilder generates asks the judge for prose ("Step 1: assess...,
+# Step 2: score..."), but the Vertex AI Evaluation service parses the judge's
+# reply as JSON. Without this system instruction EVERY LLM metric fails with
+# `400 Error parsing JSON` - with every judge model, including the codelab's
+# gemini-3.1-pro-preview - and the codelab then silently scores it 50.
+JUDGE_SYSTEM_INSTRUCTION = (
+    "You are a strict evaluator. Follow the evaluation steps in the prompt, then "
+    "output ONLY a single JSON object and nothing else - no markdown, no headings, "
+    'no prose outside the JSON: {"score": <integer from the rating scale>, '
+    '"explanation": "<your assessment of each criterion and the rationale for the score>"}'
+)
+
 # ============================================================================
 # CUSTOM METRICS - each uses MetricPromptBuilder for structured rubrics
 # ============================================================================
@@ -68,6 +81,7 @@ def _create_safety_compliance_metric() -> types.LLMMetric:
         name="safety_compliance",
         prompt_template=str(builder),
         judge_model=_get_model_resource(),
+        judge_model_system_instruction=JUDGE_SYSTEM_INSTRUCTION,
     )
 
 
@@ -109,6 +123,7 @@ def _create_community_impact_metric() -> types.LLMMetric:
         name="community_impact",
         prompt_template=str(builder),
         judge_model=_get_model_resource(),
+        judge_model_system_instruction=JUDGE_SYSTEM_INSTRUCTION,
     )
 
 
@@ -137,6 +152,7 @@ def _create_logistics_completeness_metric() -> types.LLMMetric:
         name="logistics_completeness",
         prompt_template=str(builder),
         judge_model=_get_model_resource(),
+        judge_model_system_instruction=JUDGE_SYSTEM_INSTRUCTION,
     )
 
 
@@ -164,6 +180,7 @@ def _create_financial_viability_metric() -> types.LLMMetric:
         name="financial_viability",
         prompt_template=str(builder),
         judge_model=_get_model_resource(),
+        judge_model_system_instruction=JUDGE_SYSTEM_INSTRUCTION,
     )
 
 
@@ -188,6 +205,7 @@ def _create_participant_experience_metric() -> types.LLMMetric:
         name="participant_experience",
         prompt_template=str(builder),
         judge_model=_get_model_resource(),
+        judge_model_system_instruction=JUDGE_SYSTEM_INSTRUCTION,
     )
 
 
@@ -212,6 +230,7 @@ def _create_intent_alignment_metric() -> types.LLMMetric:
         name="intent_alignment",
         prompt_template=str(builder),
         judge_model=_get_model_resource(),
+        judge_model_system_instruction=JUDGE_SYSTEM_INSTRUCTION,
     )
 
 
@@ -327,14 +346,28 @@ async def _run_custom_eval(
     ]
     result = client.evals.evaluate(dataset=df, metrics=metrics)
 
-    scores, details = {}, {}
+    scores, details, failed = {}, {}, []
     for case in result.eval_case_results:
         for cand in case.response_candidate_results:
             for metric_name, metric_result in cand.metric_results.items():
-                raw_score = metric_result.score if hasattr(metric_result, "score") and metric_result.score is not None else 50.0
-                scores[metric_name] = round(float(raw_score), 2)
-                if hasattr(metric_result, "explanation") and metric_result.explanation:
+                score = getattr(metric_result, "score", None)
+                if score is None:
+                    # DEVIATION FROM THE CODELAB (docs/GOTCHAS.md #17): the codelab
+                    # substitutes 50.0 for a failed judge, so six failed judges
+                    # produce a plausible-looking 52.5 labelled "vertex_ai_eval".
+                    # A failed metric is a failed metric: record it and let the
+                    # caller decide whether the run still counts.
+                    failed.append(metric_name)
+                    err = getattr(metric_result, "error_message", None)
+                    logger.warning(f"Judge metric {metric_name} failed: {str(err)[:200]}")
+                    continue
+                scores[metric_name] = round(float(score), 2)
+                if getattr(metric_result, "explanation", None):
                     details[metric_name] = metric_result.explanation
+    if failed:
+        raise RuntimeError(
+            f"{len(failed)}/{len(scores) + len(failed)} judge metrics failed: {', '.join(failed)}"
+        )
     return scores, details
 
 
@@ -395,13 +428,22 @@ def _heuristic_eval(user_intent: str, proposed_plan: str) -> tuple[dict[str, flo
     return scores, details
 
 
+# El agente tiene que copiar estas descripciones dentro de su salida
+# estructurada. Sin tope, seis explicaciones de juez desbordan
+# max_output_tokens y el JSON llega cortado (docs/GOTCHAS.md #19).
+MAX_FINDING_CHARS = 400
+
+
 def _build_result(scores, details, eval_method):
     """Build the final evaluation result from scores and details."""
     findings, improvement_suggestions = [], []
     for criterion, score in scores.items():
         if score < 80.0:
             severity = "high" if score < SEVERITY_THRESHOLDS["high"] else "medium" if score < SEVERITY_THRESHOLDS["medium"] else "low"
-            findings.append({"criterion": criterion, "description": details.get(criterion, f"Score: {score}"), "severity": severity})
+            descripcion = details.get(criterion, f"Score: {score}")
+            if len(descripcion) > MAX_FINDING_CHARS:
+                descripcion = descripcion[:MAX_FINDING_CHARS].rstrip() + "..."
+            findings.append({"criterion": criterion, "description": descripcion, "severity": severity})
             improvement_suggestions.append(_suggest_improvement(criterion, score, details.get(criterion, "")))
 
     overall_score = round(sum(scores.get(c, 50.0) * w for c, w in CRITERION_WEIGHTS.items()), 2)

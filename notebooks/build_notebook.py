@@ -368,25 +368,26 @@ code(r'''
 
 import json, os
 
-PLAN_FLOJO = "Vamos a hacer una maratón en Las Vegas. Va a estar buena."
+PLAN_FLOJO = "Vamos a hacer una maratón en Buenos Aires. Va a estar buena."
 
 PLAN_COMPLETO = """
-Las Vegas Marathon. Recorrido de 26.2 miles (42.195 km) arrancando en el
-Festival Grounds. Water station cada 2.5 km, medical tent cada 5 km con
-ambulancia después del km 30, chip timing en start line y finish line,
-emergency vehicle crossings cada 2 miles con desvío señalizado alrededor
-del hospital. Cheer zones con community engagement en 4 barrios.
+Maratón de Buenos Aires. Recorrido de 26.2 miles (42.195 km) con largada y
+llegada en el Obelisco: Plaza de Mayo, Puerto Madero, Reserva Ecológica,
+La Boca, San Telmo, Recoleta, Bosques de Palermo y Barrancas de Belgrano.
+Water station cada 2.5 km, medical tent cada 5 km con ambulancia después del
+km 30, chip timing en start line y finish line, emergency vehicle crossings
+cada 2 miles con desvío señalizado alrededor del Hospital Argerich y el
+Hospital Fernández. Cheer zones con community engagement en 4 barrios.
 Budget de USD 2.74M con revenue de inscripciones, sponsors y expo.
-Landmarks escénicos: Bellagio Fountains, The Sphere, Fremont Street.
-Post-race: medals, comida y recovery area.
+Landmarks escénicos: Obelisco, Puente de la Mujer, Caminito, Floralis Genérica.
+Post-race: medals, comida y recovery area en los Bosques de Palermo.
 """
-
 os.environ["EVAL_MODE"] = "heuristic"   # fuerza el fallback
 from src.planner_agent.evaluator.tools import evaluate_plan
 
 for nombre, plan in [("PLAN FLOJO", PLAN_FLOJO), ("PLAN COMPLETO", PLAN_COMPLETO)]:
     r = await evaluate_plan(json.dumps({
-        "user_intent": "Maratón escénica en Las Vegas para 30.000 personas",
+        "user_intent": "Maratón escénica en Buenos Aires para 30.000 personas",
         "proposed_plan": plan,
     }))
     print(f"\n{'=' * 60}\n{nombre}  →  método: {r['eval_method']}")
@@ -412,7 +413,7 @@ os.environ["EVAL_MODE"] = "auto"        # volvemos al camino Vertex AI Eval
 
 t0 = time.time()
 r = await evaluate_plan(json.dumps({
-    "user_intent": "Maratón escénica en Las Vegas para 30.000 personas",
+    "user_intent": "Maratón escénica en Buenos Aires para 30.000 personas",
     "proposed_plan": PLAN_COMPLETO,
 }))
 print(f"⏱  {time.time() - t0:.0f}s   método: {r['eval_method']}\n")
@@ -461,7 +462,7 @@ En este repo el archivo existe: red vial por ciudad, Dijkstra, cierre de loop so
 code(r'''
 # @title 2.1 — Calcular la ruta (Dijkstra, sin LLM) { display-mode: "form" }
 
-CIUDAD = "Las Vegas"  # @param ["Las Vegas", "Austin", "Buenos Aires", "Tokyo"]
+CIUDAD = "Buenos Aires"  # @param ["Buenos Aires", "Las Vegas", "Austin", "Tokyo"]
 
 import importlib.util
 
@@ -500,8 +501,13 @@ import folium
 coords = ruta["route_geojson"]["features"][0]["geometry"]["coordinates"]  # [lon, lat]
 latlon = [[c[1], c[0]] for c in coords]
 
-# OpenStreetMap: sin API key. (CartoDB ahora pide una y deja el fondo gris.)
-m = folium.Map(location=latlon[0], zoom_start=13, tiles="OpenStreetMap")
+# Esri World Street Map: sin API key y sin bloqueo desde Colab.
+# (OpenStreetMap devuelve 403 desde Colab por politica de uso; CartoDB pide key.)
+m = folium.Map(
+    location=latlon[0], zoom_start=13,
+    tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
+    attr="Tiles &copy; Esri",
+)
 
 folium.PolyLine(latlon, weight=6, opacity=0.85, color="#FF6B35",
                 tooltip="26.2 mi / 42.195 km").add_to(m)
@@ -668,30 +674,58 @@ code(r"""
 # `adk web` es la interfaz de desarrollo de ADK: un chat con el agente y, al
 # lado, la traza de cada tool call, del sub-agente Evaluator y del salto A2A al
 # Simulator. El codelab no la menciona. Corre en la VM y Colab la proxea.
+#
+# La URL NO es fija: Colab firma un subdominio por sesion y por usuario
+# (https://8000-m-s-<hash>.<region>.prod.colab.dev). Por eso hay que pedirla en
+# runtime con google.colab.kernel.proxyPort(8000). Copiarla de un tutorial no
+# funciona nunca.
 
 import os, shutil, subprocess, sys, time
+import httpx
+from google.colab import output
 from google.colab.output import eval_js
-from IPython.display import HTML, IFrame, display
+from IPython.display import HTML, display
 
 ADK_PORT = 8000
+UI_PATH = "/dev-ui/?app=planner_agent"
+
 adk_env = {**os.environ, "SIMULATOR_AGENT_RESOURCE_NAME": "local:8089", "PYTHONUNBUFFERED": "1"}
-adk_cmd = [shutil.which("adk") or sys.executable, *([] if shutil.which("adk") else ["-m", "google.adk.cli"]),
-           "web", "--port", str(ADK_PORT), "src"]
+# --host 0.0.0.0: escucha en todas las interfaces de la VM, no solo en loopback.
+adk_bin = shutil.which("adk")
+adk_cmd = ([adk_bin] if adk_bin else [sys.executable, "-m", "google.adk.cli"]) + \
+          ["web", "--host", "0.0.0.0", "--port", str(ADK_PORT), "src"]
 
 adkweb = subprocess.Popen(
     adk_cmd, cwd=REPO_DIR, env=adk_env,
     stdout=open(f"{LOGS}/adkweb.log", "w"), stderr=subprocess.STDOUT,
 )
-print(f"ADK Dev UI arrancando (pid {adkweb.pid})...")
-if esperar_puerto(ADK_PORT, "ADK Dev UI", f"{LOGS}/adkweb.log", segundos=120):
-    base = eval_js(f"google.colab.kernel.proxyPort({ADK_PORT})")
-    url = f"{base}dev-ui/?app=planner_agent"
-    print("\nURL de la UI (misma cuenta de Google, otra pestaña):\n  " + url)
-    display(HTML(f'<p style="font-size:1.2em"><a href="{url}" target="_blank">🔗 Abrir la ADK Dev UI en otra pestaña</a></p>'))
-    print("Si tu navegador bloquea el popup, usá el link de arriba.")
-    print("En la UI: agente `planner_agent` → escribí el pedido → mirá el panel Events.")
-    print("\nTambién embebida acá abajo (si tu navegador lo permite):")
-    display(IFrame(url, width="100%", height=650))
+print(f"ADK Dev UI arrancando (pid {adkweb.pid}):\n  {' '.join(adk_cmd)}\n")
+
+if not esperar_puerto(ADK_PORT, "ADK Dev UI", f"{LOGS}/adkweb.log", segundos=120):
+    raise SystemExit("adk web no levantó. Mirá el log de arriba.")
+
+# Health check DESDE la VM antes de dar la URL: si esto responde, el servidor
+# está bien y cualquier problema posterior es del proxy o de la cuenta.
+apps = httpx.get(f"http://127.0.0.1:{ADK_PORT}/list-apps", timeout=10).json()
+print(f"✓ el servidor responde en :{ADK_PORT} y ve los agentes: {apps}")
+
+# URL de ESTA sesión.
+base = eval_js(f"google.colab.kernel.proxyPort({ADK_PORT})").rstrip("/")
+url = base + UI_PATH
+print("\nCómo se arma la URL de esta sesión (no la anotes, pedila):")
+print(f"  base = google.colab.kernel.proxyPort({ADK_PORT})")
+print(f"       = {base}")
+print(f"  url  = base + '{UI_PATH}'")
+print(f"\n  {url}\n")
+display(HTML(f'<p style="font-size:1.2em"><a href="{url}" target="_blank">🔗 Abrir la ADK Dev UI en otra pestaña</a></p>'))
+
+# La forma oficial de Colab: abre la pestaña con la URL firmada correcta.
+print("Abriendo también con output.serve_kernel_port_as_window(...)")
+print("(si el navegador bloquea el popup, usá el link de arriba)")
+output.serve_kernel_port_as_window(ADK_PORT, path=UI_PATH)
+
+print("\nEn la UI: agente `planner_agent` → escribí el pedido → panel Events.")
+print("Solo abre con la MISMA cuenta de Google que corre este notebook.")
 """)
 
 # ---------------------------------------------------------------------------
@@ -721,7 +755,7 @@ Con `gemini-3.1-flash-lite` tarda **alrededor de 1 minuto**. Si usás el `gemini
 code(r'''
 # @title 4.1 — Mandar el pedido end-to-end (~1 min) { display-mode: "form" }
 
-CIUDAD_PEDIDO = "Las Vegas"  # @param {type:"string"}
+CIUDAD_PEDIDO = "Buenos Aires"  # @param {type:"string"}
 PARTICIPANTES = 30000  # @param {type:"integer"}
 TEMA = "scenic"  # @param ["scenic", "fast", "charity"]
 

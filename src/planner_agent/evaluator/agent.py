@@ -32,7 +32,9 @@ if project_id:
     vertexai.init(project=project_id, location=location)
 
 # Enable thinking for better evaluation reasoning
-evaluator_config = GenerateContentConfig(max_output_tokens=4096)
+# 4096 (el valor del codelab) no alcanza: la salida estructurada incluye
+# siete scores, sus findings y las sugerencias. Ver docs/GOTCHAS.md #19.
+evaluator_config = GenerateContentConfig(max_output_tokens=8192)
 if "pro" in MODEL:
     evaluator_config.thinking_config = ThinkingConfig(thinking_budget=1024)
 

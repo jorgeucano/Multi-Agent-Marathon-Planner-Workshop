@@ -38,7 +38,7 @@ pre-warmed fallback.
 | 0-4 | Framing | Three agents, one request. Why not one prompt. | — |
 | 4-8 | The bug that teaches | `git tag -l`, then GOTCHAS #2: the tool the codelab calls but never writes. "A missing tool looks like a hallucination, not an error." | — |
 | 8-18 | The Evaluator | `evaluator/tools.py`: one `MetricPromptBuilder` on screen. Then `tests/test_evaluator_scoring.py::test_high_severity_finding_blocks_a_pass` — 95 average, still fails. | Offline, always works |
-| 18-26 | The route | `plan_marathon_route("Las Vegas")` in a REPL: waypoints, closure severity, 42.195 km with the adjustment stated. | Offline |
+| 18-26 | The route | `plan_marathon_route("Buenos Aires")` in a REPL: waypoints, closure severity, 42.195 km with the adjustment stated. | Offline |
 | 26-34 | Wiring | `agent/tools.py::get_tools()`: SkillToolset / AgentTool / RemoteA2aAgent side by side. Start the simulator, `curl` its agent card. | — |
 | 34-40 | One env var | Start the planner **without** the var (banner: `SOLO`), Ctrl+C, start **with** it (banner: `FULL TEAM`, 7 tools). | — |
 | 40-52 | The run | `make web` -> ADK dev UI. Type the request. Narrate the event trace while the Evaluator thinks (1-3 min). | `EVAL_MODE=heuristic` run pre-started in another tab; switch if the judge stalls past 3 min |
@@ -70,7 +70,7 @@ uv run --extra dev pytest -q
 ## The three moments that carry the workshop
 
 1. **The judge scoring a bad plan.** Feed a deliberately thin plan
-   (`--city Austin --participants 30000` with the instruction trimmed) and show
+   (`--city Rosario --participants 30000` with the instruction trimmed) and show
    `safety_compliance` collapsing with a high-severity finding that blocks the
    pass even though the average is high. That is `_build_result` doing real work.
 2. **Killing Vertex AI Eval mid-demo** (`EVAL_MODE=heuristic`). The system keeps

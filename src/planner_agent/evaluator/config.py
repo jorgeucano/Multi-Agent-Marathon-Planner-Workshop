@@ -21,7 +21,8 @@ AGENT_DESCRIPTION = (
 )
 
 # Model - use gemini-3.1-pro-preview for evaluation accuracy
-MODEL = os.getenv("EVALUATOR_MODEL", "gemini-3.1-pro-preview")
+# Rehearsed default. The codelab's gemini-3.1-pro-preview also works, but only in location=global.
+MODEL = os.getenv("EVALUATOR_MODEL", "gemini-3.1-flash-lite")
 
 # Criterion weights must sum to 1.0
 CRITERION_WEIGHTS = {
