@@ -1,5 +1,7 @@
 # marathon-agents
 
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/jorgeucano/Multi-Agent-Marathon-Planner-Workshop/blob/main/notebooks/marathon_agents_workshop.ipynb)
+
 Three ADK agents that plan a city marathon together: a **Planner** that
 orchestrates, an **Evaluator** that scores the plan with Vertex AI Evaluation
 (LLM-as-Judge), and a **Simulation Controller** that clears it for simulation —
@@ -140,10 +142,17 @@ uv run --no-project --with pytest python -m pytest tests/test_route_planning.py 
 
 ## Run it in Colab (no local setup)
 
-There is a companion Colab notebook that runs the whole system on a Colab VM:
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/jorgeucano/Multi-Agent-Marathon-Planner-Workshop/blob/main/notebooks/marathon_agents_workshop.ipynb)
+
+`notebooks/marathon_agents_workshop.ipynb` runs the whole system on a Colab VM:
 `auth.authenticate_user()` replaces the ADC dance, both A2A servers run as
-processes on the same VM, and the route is plotted on a map. Open Colab, set
-`PROJECT_ID`, and run the cells top to bottom.
+processes on the same VM, the route is plotted on a map, and every step has a
+short explanation plus an intermediate check. Attendees need a GCP project
+with billing enabled and nothing else — the notebook's first cell lists the
+prerequisites.
+
+The notebook is generated from `notebooks/build_notebook.py` so the cells are
+reviewable source; edit the script, run it, commit both.
 
 ## Teaching it
 
