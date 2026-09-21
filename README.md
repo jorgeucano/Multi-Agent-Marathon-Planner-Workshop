@@ -37,7 +37,8 @@ exercises the three agents end to end.
 ## Quickstart
 
 ```bash
-git clone <your-fork-url> && cd marathon-agents
+git clone https://github.com/jorgeucano/Multi-Agent-Marathon-Planner-Workshop.git marathon-agents
+cd marathon-agents
 curl -LsSf https://astral.sh/uv/install.sh | sh && source $HOME/.local/bin/env
 
 cp .env.example .env && $EDITOR .env        # set GOOGLE_CLOUD_PROJECT
@@ -124,6 +125,13 @@ docs/
 uv run --extra dev pytest -q          # full suite
 uv run --no-project --with pytest python -m pytest tests/test_route_planning.py -q   # offline only
 ```
+
+## Run it in Colab (no local setup)
+
+There is a companion Colab notebook that runs the whole system on a Colab VM:
+`auth.authenticate_user()` replaces the ADC dance, both A2A servers run as
+processes on the same VM, and the route is plotted on a map. Open Colab, set
+`PROJECT_ID`, and run the cells top to bottom.
 
 ## Teaching it
 
