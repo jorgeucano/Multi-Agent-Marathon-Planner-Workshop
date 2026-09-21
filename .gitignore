@@ -10,3 +10,6 @@ dist/
 .ruff_cache/
 .DS_Store
 *.log
+
+# ADK dev UI session store (adk web), never commit
+.adk/
