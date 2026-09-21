@@ -5,9 +5,13 @@ description = "Multi-agent marathon planning system with ADK, A2A, and Vertex AI
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "google-cloud-aiplatform[agent_engines,adk,evaluation]>=1.121.0",
-    "google-adk>=1.25.0",
-    "a2a-sdk>=0.3.9",
+    # Techos deliberados: el codelab declara solo pisos (>=) y hoy eso resuelve
+    # a google-adk 2.x / a2a-sdk 1.x / aiplatform 2.x, donde `vertexai.types`,
+    # `a2a.server.apps` y `a2a.types.TransportProtocol` ya no existen.
+    # Ver docs/GOTCHAS.md #10.
+    "google-cloud-aiplatform[agent_engines,adk,evaluation]>=1.121.0,<2",
+    "google-adk>=1.25.0,<2",
+    "a2a-sdk>=0.3.9,<1",
     "pydantic>=2.12.0",
     "python-dotenv>=1.0.0",
     "httpx>=0.27.0",

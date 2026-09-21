@@ -103,12 +103,21 @@ async def send(base_url: str, prompt: str, timeout: float, watch: bool) -> int:
     print(f"STATE: {state}   ({time.time() - started:.0f}s)")
     print("=" * 70)
 
+    if state != "completed":
+        # El motivo va en status.message, no en los artifacts. Mostralo primero:
+        # enterrarlo en un dump de JSON es lo que hace que un error de
+        # credenciales parezca un problema de A2A.
+        msg = (result.get("status") or {}).get("message") or {}
+        motivo = "".join(p.get("text", "") for p in msg.get("parts", []))
+        print(f"\nMOTIVO: {motivo or '(sin mensaje)'}")
+        print("\nRevisá el log del planner: el traceback completo está ahí.")
+
     for artifact in result.get("artifacts", []) or []:
         for part in artifact.get("parts", []):
             if part.get("text"):
                 print(part["text"])
 
-    if not result.get("artifacts"):
+    if not result.get("artifacts") and state == "completed":
         print(json.dumps(result, indent=2)[:4000])
 
     return 0 if state == "completed" else 1

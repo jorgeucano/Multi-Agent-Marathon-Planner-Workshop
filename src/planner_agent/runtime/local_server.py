@@ -10,6 +10,15 @@ from dotenv import load_dotenv
 load_dotenv()
 os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "true"
 
+# El wiring de tools loguea en import-time, antes de que uvicorn instale su
+# logging. Sin esto, las lineas "Added local Evaluator tool" / "Added A2A
+# Simulation Controller tool" nunca llegan al log y no podes verificar el modo.
+import logging  # noqa: E402
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(levelname)-8s %(name)s: %(message)s",
+)
+
 import asyncio  # noqa: E402
 
 import uvicorn  # noqa: E402
@@ -73,6 +82,17 @@ async def run_server():
     print(f"Project:   {project}")
     print(f"Executor:  {'ADK A2aAgentExecutor' if USE_ADK_EXECUTOR else 'MarathonPlannerExecutor'}")
     print(f"Mode:      {'FULL TEAM -> ' + simulator if simulator else 'SOLO (Planner + Evaluator)'}")
+    print("=" * 60)
+
+    # Construir el agente ACA, no en el primer request: si algo del wiring esta
+    # roto (una Skill que no resuelve, una tool que no carga, el A2A mal
+    # configurado) queremos el traceback al arrancar y no en vivo.
+    from ..agent import root_agent
+
+    print(f"Agent:     {root_agent.name} ({root_agent.model})")
+    print(f"Tools:     {len(root_agent.tools)}")
+    for t in root_agent.tools:
+        print(f"             - {getattr(t, 'name', type(t).__name__)}")
     print("=" * 60)
 
     app = create_marathon_planner_server()

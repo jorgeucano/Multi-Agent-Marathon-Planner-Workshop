@@ -116,20 +116,66 @@ while the simulator listens on 8089. It only works because the caller passes
 
 ## B. Things that are correct but will bite you live
 
-### 10. `output_schema` together with `tools`
+### 10. Unpinned dependencies: the codelab does not install today
+
+**Verified on 2026-09-21, from a clean environment.** The codelab declares only
+floors:
+
+```toml
+"google-cloud-aiplatform[agent_engines,adk,evaluation]>=1.121.0"
+"google-adk>=1.25.0"
+"a2a-sdk>=0.3.9"
+```
+
+Today those floors resolve to the **next major** of all three:
+
+| Package | Codelab floor | Resolves to |
+|---|---|---|
+| `google-adk` | `>=1.25.0` | **2.9.2** |
+| `a2a-sdk` | `>=0.3.9` | **1.1.5** |
+| `google-cloud-aiplatform` | `>=1.121.0` | **2.1.3** |
+
+On those versions, symbols the codelab code imports are gone:
+
+```
+x a2a.server.apps                 -> ModuleNotFoundError  (no A2A server at all)
+x a2a.types.TransportProtocol     -> symbol missing
+x a2a.utils.new_agent_text_message -> symbol missing
+```
+
+`a2a.server.apps` is where `A2AStarletteApplication` lives. Without it **neither
+local server can be built** — the entire final step of the codelab fails at
+import. Someone copy-pasting the codelab today gets a `ModuleNotFoundError`, not
+a working system.
+
+**Here:** upper bounds in `pyproject.toml` (`google-adk>=1.25,<2`,
+`a2a-sdk>=0.3.9,<1`, `google-cloud-aiplatform>=1.121,<2`), which resolve to
+adk 1.39.1 / a2a-sdk 0.3.26 / aiplatform 1.165.1 — all 31 symbols present, all
+three agents construct, both servers start, the A2A round trip completes.
+`uv.lock` is committed so every attendee gets exactly what was rehearsed.
+
+> Note on a false alarm: `vertexai.types` fails under
+> `importlib.import_module("vertexai.types")` but the codelab's actual form,
+> `from vertexai import types`, resolves fine (lazy alias to
+> `vertexai._genai.types`). Don't "fix" that one.
+
+### 10b. `output_schema` together with `tools`
 
 Both the Evaluator (`output_schema=EvaluationResult` + `PreloadMemoryTool` +
 `evaluate_plan`) and the Simulator (`output_schema=SimulationApproval` +
-`SkillToolset`) use this combination. It has a rough history in ADK: older
-versions raise `ValueError: if output_schema is set, tools must be empty`;
-[#3413](https://github.com/google/adk-python/issues/3413) reports an infinite
-tool-call loop on 1.18; [#3969](https://github.com/google/adk-python/issues/3969)
-reports the schema being ignored.
+`SkillToolset`) use this combination. On adk 1.39.1 **both agents construct
+without error** — verified locally. The historical failure modes are runtime
+ones: [#3413](https://github.com/google/adk-python/issues/3413) (infinite tool
+loop on 1.18) and [#3969](https://github.com/google/adk-python/issues/3969)
+(schema ignored). If it loops on stage, drop `output_schema` from the Simulator
+and let the instruction carry the format.
 
-`google-adk>=1.25.0` with no upper bound means every attendee can resolve a
-different version. **Pin the exact version you tested, commit `uv.lock`, and
-rehearse on it.** If it loops, the fastest fix on stage is to drop
-`output_schema` from the Simulator and let the instruction carry the format.
+### 10c. Experimental features in use
+
+ADK prints `[EXPERIMENTAL]` warnings for three things this system depends on:
+`SKILL_TOOLSET`, `RemoteA2aAgent` / `A2aAgentExecutor`, and `AGENT_CONFIG`.
+They work, but expect breaking changes between ADK minors — one more reason the
+lock file matters.
 
 ### 11. Preview models
 

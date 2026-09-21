@@ -8,6 +8,15 @@ import os
 
 os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "true"
 
+# El wiring de tools loguea en import-time, antes de que uvicorn instale su
+# logging. Sin esto, las lineas "Added local Evaluator tool" / "Added A2A
+# Simulation Controller tool" nunca llegan al log y no podes verificar el modo.
+import logging  # noqa: E402
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(levelname)-8s %(name)s: %(message)s",
+)
+
 import uvicorn  # noqa: E402
 from a2a.server.apps import A2AStarletteApplication  # noqa: E402
 from a2a.server.request_handlers import DefaultRequestHandler  # noqa: E402
@@ -31,6 +40,13 @@ async def run_server():
     print("=" * 60)
     print("Starting Simulation Controller Agent Local A2A Server")
     print(f"Project: {project}")
+    print("=" * 60)
+
+    # Mismo criterio que el planner: fallar al arrancar, no en el primer request.
+    from ..agent import root_agent
+
+    print(f"Agent:     {root_agent.name} ({root_agent.model})")
+    print(f"Tools:     {[getattr(t, 'name', type(t).__name__) for t in root_agent.tools]}")
     print("=" * 60)
 
     agent_card = create_simulation_controller_card()

@@ -1,5 +1,6 @@
 """A2A Agent Executor for Marathon Planner Agent."""
 
+import logging
 import os
 
 import vertexai
@@ -14,6 +15,8 @@ from google.genai import types
 
 from ..services.memory_manager import create_memory_service
 from ..services.session_manager import SessionManager, create_session_service
+
+logger = logging.getLogger(__name__)
 
 
 class MarathonPlannerExecutor(AgentExecutor):
@@ -118,6 +121,8 @@ class MarathonPlannerExecutor(AgentExecutor):
 
             await updater.update_status(TaskState.failed, message=new_agent_text_message("Failed to generate plan"), final=True)
         except Exception as e:
+            # Sin esto el traceback real se pierde y el log solo dice "Planning failed".
+            logger.exception("Planning failed")
             await updater.update_status(TaskState.failed, message=new_agent_text_message(f"Planning failed: {e}"), final=True)
 
     async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:

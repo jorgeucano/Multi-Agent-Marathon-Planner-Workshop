@@ -1,5 +1,6 @@
 """A2A Agent Executor for Simulation Controller Agent."""
 
+import logging
 import os
 
 import vertexai
@@ -14,6 +15,8 @@ from google.genai import types
 
 from ..services.memory_manager import create_memory_service
 from ..services.session_manager import SessionManager, create_session_service
+
+logger = logging.getLogger(__name__)
 
 
 class SimulationControllerExecutor(AgentExecutor):
@@ -77,6 +80,8 @@ class SimulationControllerExecutor(AgentExecutor):
                     return
             await updater.update_status(TaskState.failed, message=new_agent_text_message("Failed"), final=True)
         except Exception as e:
+            # Sin esto el traceback real se pierde y el log solo dice "Review failed".
+            logger.exception("Review failed")
             await updater.update_status(TaskState.failed, message=new_agent_text_message(f"Review failed: {e}"), final=True)
 
     async def cancel(self, context, event_queue):
