@@ -257,6 +257,48 @@ if any(m.startswith("src.") for m in sys.modules):
 !python scripts/preflight.py
 ''')
 
+md(r"""
+### 0.4 — Reparación: ¿estoy corriendo el código viejo?
+
+Si ya habías corrido este notebook antes de una actualización del repo, en disco
+tenés el código de la primera vez **y** en memoria los módulos ya importados.
+Esta celda arregla las dos cosas de una, sin reiniciar la sesión. Es idempotente:
+corrila las veces que quieras.
+""")
+
+code(r"""
+# @title 0.4 — Actualizar el repo y purgar los módulos cacheados { display-mode: "form" }
+
+import os, sys, subprocess
+
+REPO_DIR = "/content/marathon-agents"
+
+antes = subprocess.run(["git", "-C", REPO_DIR, "rev-parse", "--short", "HEAD"],
+                       capture_output=True, text=True).stdout.strip()
+
+# fetch + reset, NO pull: la historia del repo puede haber sido reescrita.
+!cd {REPO_DIR} && git fetch --tags --force origin && git reset --hard origin/main
+
+despues = subprocess.run(["git", "-C", REPO_DIR, "rev-parse", "--short", "HEAD"],
+                         capture_output=True, text=True).stdout.strip()
+
+# Actualizar archivos no sirve de nada si Python ya tiene el módulo cacheado:
+# sacarlos de sys.modules hace que el próximo import lea el código nuevo.
+purgados = [m for m in list(sys.modules) if m == "src" or m.startswith("src.")]
+for m in purgados:
+    del sys.modules[m]
+
+os.chdir(REPO_DIR)
+if REPO_DIR not in sys.path:
+    sys.path.insert(0, REPO_DIR)
+
+print(f"\ncommit: {antes} → {despues}" + ("  (sin cambios)" if antes == despues else "  ✓ ACTUALIZADO"))
+print(f"módulos purgados de la memoria: {len(purgados)}" + (f" → {', '.join(sorted(purgados)[:4])}..." if purgados else ""))
+if antes != despues:
+    print("\nVolvé a correr las celdas 1.x en adelante: ahora usan el código nuevo.")
+    print("Si alguna sigue rara, Entorno de ejecución → Reiniciar sesión y empezá desde 0.1.")
+""")
+
 # ---------------------------------------------------------------------------
 # Paso 1 — Evaluator
 # ---------------------------------------------------------------------------
