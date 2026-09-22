@@ -753,7 +753,6 @@ code(r"""
 import os, shutil, subprocess, sys, time
 import httpx
 from google.colab import output
-from google.colab.output import eval_js
 from IPython.display import HTML, display
 
 ADK_PORT = 8000
@@ -779,27 +778,16 @@ if not esperar_puerto(ADK_PORT, "ADK Dev UI", f"{LOGS}/adkweb.log", segundos=120
 apps = httpx.get(f"http://127.0.0.1:{ADK_PORT}/list-apps", timeout=10).json()
 print(f"✓ el servidor responde en :{ADK_PORT} y ve los agentes: {apps}")
 
-# URL de ESTA sesión.
-base = eval_js(f"google.colab.kernel.proxyPort({ADK_PORT})").rstrip("/")
-url = base + UI_PATH
-print("\nCómo se arma la URL de esta sesión (no la anotes, pedila):")
-print(f"  base = google.colab.kernel.proxyPort({ADK_PORT})")
-print(f"       = {base}")
-print(f"  url  = base + '{UI_PATH}'")
-print(f"\n  {url}\n")
-print("(esa URL sirve para entender el mecanismo; para USAR la UI, mirá el iframe de abajo)")
-
-# IMPORTANTE: abrir en PESTAÑA NUEVA no funciona. El HTML carga, pero el proxy
-# de Colab devuelve 403 en los chunks de JavaScript (las sub-peticiones no
-# llevan la autenticación de la sesión) y ves una página en blanco con cuatro
-# errores 403 en la consola. Es la razón por la que serve_kernel_port_as_window
-# está deprecada. El iframe corre dentro del contexto autenticado del notebook
-# y sí carga. Ver docs/GOTCHAS.md #21.
+# IMPORTANTE: no imprimimos la URL firmada de proxyPort porque abrirla en una
+# pestaña nueva carga el HTML pero devuelve 403 para los chunks JavaScript. La
+# URL solo es válida dentro del contexto autenticado del notebook. Colab genera
+# esa URL internamente para el iframe. Ver docs/GOTCHAS.md #21.
 print("\nLa UI, acá abajo (agente `planner_agent` → escribí el pedido → panel Events):")
 output.serve_kernel_port_as_iframe(ADK_PORT, path=UI_PATH, height="700")
 
 print("\n" + "=" * 70)
-print("SI EL IFRAME QUEDA EN BLANCO: no insistas, pasá a la celda 4.3.")
+print("NO ABRAS EL PROXY EN OTRA PESTAÑA: los chunks JavaScript reciben 403.")
+print("SI ESTE IFRAME QUEDA EN BLANCO: pasá a la celda 4.3 o probá la 3.5.")
 print("El proxy de Colab devuelve 403 en los chunks de JavaScript de la UI")
 print("(el HTML carga, el JS no). No es tu servidor: el health check de arriba")
 print("ya probó que responde. La 4.3 muestra la misma coreografía sin proxy.")
@@ -807,13 +795,14 @@ print("=" * 70)
 """)
 
 md(r"""
-### 3.5 — Plan B para la UI: un túnel que sí funciona
+### 3.5 — Plan B para la UI: túnel público opcional
 
 Si el iframe de la 3.4 quedó en blanco, el problema es el proxy de Colab: devuelve
 `403` en los chunks de JavaScript de la interfaz. El HTML llega, el JS no.
 
 Un túnel evita el proxy por completo: expone el puerto 8000 de la VM en una URL
-pública propia. **Verificado**: HTML 200, chunks 200, API respondiendo.
+pública propia. El hostname nuevo puede tardar varios segundos en propagarse;
+la celda espera DNS y HTTP antes de mostrar el enlace.
 
 > ⚠️ **Esa URL es pública y sin autenticación.** Cualquiera que la tenga puede
 > usar tu agente y gastar tu cuota de Vertex AI. Es aleatoria y efímera, pero
@@ -827,7 +816,8 @@ code(r"""
 
 ENTIENDO_QUE_ES_PUBLICO = False  # @param {type:"boolean"}
 
-import re, subprocess, time
+import re, socket, subprocess, time
+from urllib.parse import urlparse
 from IPython.display import HTML, display
 
 if not ENTIENDO_QUE_ES_PUBLICO:
@@ -861,15 +851,44 @@ if not url_publica:
     print(open(tunel_log).read()[-1500:])
 else:
     ui = f"{url_publica}/dev-ui/?app=planner_agent"
-    time.sleep(3)
     import httpx
-    estado = httpx.get(f"{url_publica}/list-apps", timeout=30).text
-    print(f"\n✓ el túnel responde: {estado}")
-    print(f"\n  {ui}\n")
-    display(HTML(
-        f'<p style="font-size:1.2em"><a href="{ui}" target="_blank">🔗 Abrir la ADK Dev UI '
-        f'(URL pública)</a></p><p style="color:#b00">Apagala con la celda de Limpieza '
-        f'cuando termines.</p>'))
+    host = urlparse(url_publica).hostname
+    estado = None
+    ultimo_error = None
+
+    # cloudflared imprime la URL antes de que el registro DNS necesariamente
+    # esté visible. Esperamos resolución y una respuesta HTTP válida.
+    for intento in range(30):
+        if tunel.poll() is not None:
+            ultimo_error = RuntimeError(
+                f"cloudflared terminó con código {tunel.returncode}"
+            )
+            break
+        try:
+            socket.getaddrinfo(host, 443)
+            respuesta = httpx.get(
+                f"{url_publica}/list-apps", timeout=15, follow_redirects=True
+            )
+            respuesta.raise_for_status()
+            estado = respuesta.text
+            break
+        except (OSError, httpx.HTTPError) as error:
+            ultimo_error = error
+            print(f"Esperando túnel/DNS ({intento + 1}/30): {type(error).__name__}")
+            time.sleep(3)
+
+    if estado is None:
+        print(f"\nEl túnel no quedó disponible: {ultimo_error!r}")
+        print("Últimas líneas de cloudflared:")
+        print(open(tunel_log).read()[-3000:])
+        print("\nUsá la celda 4.3: no depende del proxy ni expone una URL pública.")
+    else:
+        print(f"\n✓ el túnel responde: {estado}")
+        print(f"\n  {ui}\n")
+        display(HTML(
+            f'<p style="font-size:1.2em"><a href="{ui}" target="_blank">🔗 Abrir la ADK Dev UI '
+            f'(URL pública)</a></p><p style="color:#b00">Apagala con la celda de Limpieza '
+            f'cuando termines.</p>'))
 """)
 
 # ---------------------------------------------------------------------------

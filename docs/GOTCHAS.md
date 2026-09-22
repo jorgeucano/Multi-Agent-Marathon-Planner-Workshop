@@ -318,9 +318,16 @@ requests made outside the notebook's context, so you get a blank page and four
 
 **Here:** cell 3.4 starts the server with `--host 0.0.0.0`, health-checks
 `/list-apps` from inside the VM first (so a server problem is never mistaken for
-a proxy problem), prints how the signed URL is built for teaching purposes, and
-renders the UI with `output.serve_kernel_port_as_iframe` — the iframe runs in
-the notebook's authenticated context and loads.
+a proxy problem), and renders the UI with
+`output.serve_kernel_port_as_iframe`. It deliberately does not print the signed
+URL: attendees clicked that URL, opened it outside the notebook context and hit
+four 403s on the JavaScript chunks. The iframe is the supported route, but the
+Colab proxy can still fail depending on browser/proxy state; cell 4.3 is the
+guaranteed path because it talks to the API from the kernel.
+
+Cell 3.5 is an optional public Quick Tunnel. `cloudflared` may print its
+`trycloudflare.com` URL before the hostname resolves, so the notebook retries
+DNS and `/list-apps` instead of assuming a fixed three-second delay is enough.
 
 ### 22. "Already cloned, skipping" is a silent trap
 
