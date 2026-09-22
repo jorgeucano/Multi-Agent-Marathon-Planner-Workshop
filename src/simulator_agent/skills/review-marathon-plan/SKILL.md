@@ -1,6 +1,6 @@
 ---
 name: review-marathon-plan
-description: Step-by-step methodology for reviewing marathon plans for simulation readiness, covering route feasibility, logistics completeness, and safety clearance.
+description: Step-by-step methodology for reviewing marathon plans for simulation readiness, covering route feasibility, logistics completeness, safety clearance, and runner-cohort experience.
 ---
 
 # Review Marathon Plan
@@ -24,3 +24,10 @@ Use the `check_plan_readiness` tool to confirm the presence of:
 1. Set `approved=true` ONLY if all three data categories are present.
 2. If any critical data is missing, set `approved=false` and list missing elements in `blockers`.
 3. Provide `recommendations` for minor data gaps.
+
+### Step 3: Runner-Cohort Experience
+
+1. Delegate the complete plan to `runner_agent` exactly once.
+2. Preserve the deterministic cohort sizes, pace, finish-time, dropout, and risk values returned by the Runner Agent.
+3. Include `runner_readiness` and the most important `runner_findings` in the final simulation approval.
+4. Treat the Runner Agent as a runner-experience specialist, not as a second approval gate: the Simulator remains responsible for the final `approved` decision.

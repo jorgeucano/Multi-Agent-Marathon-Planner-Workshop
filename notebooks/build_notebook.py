@@ -54,28 +54,43 @@ Si no tenés proyecto: [crear uno nuevo](https://console.cloud.google.com/projec
 
 ## Qué vamos a construir
 
-Tres agentes especializados que planifican una maratón entre los tres:
+Cuatro agentes especializados, organizados en dos procesos, convierten un
+pedido humano en un plan evaluado y una experiencia de carrera simulada:
 
 ```
                         ┌──────────────────────┐
    tu pedido  ────────► │    planner_agent     │  thinking_budget=2048
                         │  (orquestador líder) │
                         └───┬──────────────┬───┘
-            AgentTool       │              │      A2A / JSON-RPC
-       (sub-agente local)   │              │      :8089
+            AgentTool       │              │      A2A / JSON-RPC :8089
+       (mismo proceso)      │              │      (otro proceso)
                         ┌───▼──────┐   ┌───▼──────────────────┐
                         │evaluator │   │ simulator_agent      │
-                        │  agent   │   │ (server A2A propio)  │
-                        │budget=1024│  │ thinking=0           │
-                        │          │   │ checklist determin.  │
-                        └───┬──────┘   └──────────────────────┘
-                            │
-                    Vertex AI Evaluation
-                    7 métricas custom (MetricPromptBuilder)
-                    + fallback heurístico
+                        │  agent   │   │ gate de readiness    │
+                        │7 métricas│   └──────────┬───────────┘
+                        └──────────┘              │ AgentTool local
+                                           ┌─────▼────────────┐
+                                           │ runner_agent     │
+                                           │ 4 cohortes       │
+                                           │ ritmo · fatiga   │
+                                           │ hidratación      │
+                                           └──────────────────┘
 ```
 
-Modelo: `gemini-3.1-flash-lite` en los tres (elegible en el Paso 0.2). El codelab usa `gemini-3-flash-preview` + `gemini-3.1-pro-preview`: también funcionan, pero **solo en `location=global`** — con el `us-central1` del propio codelab dan 404.
+### Cómo contar esta arquitectura
+
+1. **Planner:** transforma intención en un plan operativo y decide a quién delegar.
+2. **Evaluator:** juzga calidad con siete rúbricas; no diseña ni simula.
+3. **Simulator:** decide si el plan contiene lo necesario para ejecutar una carrera.
+4. **Runner:** mira el mismo plan desde el cuerpo del corredor: ritmo, congestión,
+   hidratación, fatiga, abandono y llegada.
+
+La clave no es “tener muchos chats”. Cada agente tiene una responsabilidad, una
+herramienta y un límite claros. El Runner es **un agente que representa cuatro
+cohortes**, no 30.000 llamadas a un modelo: así preservamos la idea multiagente
+sin convertir la demo en un experimento de costo y cuota.
+
+Modelo: `gemini-3.1-flash-lite` en los cuatro (elegible en el Paso 0.2). El codelab usa `gemini-3-flash-preview` + `gemini-3.1-pro-preview`: también funcionan, pero **solo en `location=global`** — con el `us-central1` del propio codelab dan 404.
 
 ### Por qué Colab y no local
 
@@ -93,8 +108,8 @@ Modelo: `gemini-3.1-flash-lite` en los tres (elegible en el Paso 0.2). El codela
 | 0 | Setup: auth, proyecto, dependencias, repo | ~4 min |
 | 1 | El Evaluator: 7 criterios y cómo puntúa | ~8 min |
 | 2 | La ruta: Dijkstra sobre la red vial + mapa | ~8 min |
-| 3 | Levantar los 3 agentes y conectarlos por A2A | ~10 min |
-| 4 | El pedido real + **la coreografía evento por evento** | ~12 min |
+| 3 | Levantar los 4 agentes y entender los límites de proceso | ~10 min |
+| 4 | El pedido real + **la coreografía** + corredores en el mapa | ~15 min |
 | 5 | Matar Vertex AI Eval en vivo (fallback híbrido) | ~5 min |
 
 > 📦 Repo del workshop (tags por paso, `docs/GOTCHAS.md`, `docs/WORKSHOP.md`): ''' + REPO_URL + r'''
@@ -107,7 +122,14 @@ md(r'''
 ---
 ## Paso 0 — Setup
 
-Tres celdas: dependencias, autenticación, código. La primera tarda ~2 minutos (baja ADK, el SDK de Vertex AI y a2a-sdk); arrancala y seguí explicando la arquitectura mientras corre.
+Tres celdas preparan el terreno: dependencias, autenticación y código. Todavía
+no estamos “corriendo agentes”; estamos haciendo reproducible el entorno donde
+van a vivir. La primera tarda ~2 minutos: arrancala y usá ese tiempo para
+explicar el diagrama de cuatro agentes.
+
+**Qué mirar:** al terminar el preflight queremos cero fallos. Un warning de
+puerto ocupado significa que quedó un servidor de una corrida anterior; un
+fallo de modelo, credenciales o región debe resolverse antes de continuar.
 ''')
 
 code(r'''
@@ -175,10 +197,10 @@ print("✓ Credenciales listas (esto reemplaza al `gcloud auth application-defau
 os.environ["GOOGLE_CLOUD_PROJECT"] = PROJECT_ID
 os.environ["GOOGLE_CLOUD_LOCATION"] = LOCATION
 os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "true"
-# Un solo modelo flash para los tres agentes: barato, rápido, y la corrida
-# completa tarda ~1 minuto. El codelab usa gemini-3-flash-preview +
+# Un solo modelo flash para los cuatro agentes: barato, rápido, y fácil de
+# comparar. El codelab usa gemini-3-flash-preview +
 # gemini-3.1-pro-preview; también existen, pero SOLO en location=global.
-for var in ("PLANNER_MODEL", "EVALUATOR_MODEL", "SIMULATOR_MODEL"):
+for var in ("PLANNER_MODEL", "EVALUATOR_MODEL", "SIMULATOR_MODEL", "RUNNER_MODEL"):
     os.environ[var] = MODEL
 
 print(f"✓ Proyecto: {PROJECT_ID}  ·  región: {LOCATION}  ·  modelo: {MODEL}")
@@ -231,7 +253,7 @@ sys.path.insert(0, REPO_DIR)
 # El .env que leen todos los agentes (misma config que os.environ de la celda 0.2).
 with open(".env", "w") as f:
     for var in ("GOOGLE_CLOUD_PROJECT", "GOOGLE_CLOUD_LOCATION", "GOOGLE_GENAI_USE_VERTEXAI",
-                "PLANNER_MODEL", "EVALUATOR_MODEL", "SIMULATOR_MODEL"):
+                "PLANNER_MODEL", "EVALUATOR_MODEL", "SIMULATOR_MODEL", "RUNNER_MODEL"):
         f.write(f"{var}={os.environ[var]}\n")
 print("✓ .env escrito:\n")
 !cat .env
@@ -308,6 +330,11 @@ md(r'''
 
 El Evaluator es el agente más interesante del sistema y conviene entenderlo **antes** de levantar nada.
 
+> **Guion para explicar:** “El Planner propone. El Evaluator no reescribe el
+> plan ni opina libremente: lo compara contra una rúbrica estable. Separar
+> generación de evaluación evita que el mismo agente sea autor y juez de su
+> propia respuesta.”
+
 Su trabajo: puntuar un plan de maratón en **7 criterios**. Pero no lo hace "preguntándole a Gemini si el plan está bueno". Usa **Vertex AI Evaluation** con métricas custom construidas con `MetricPromptBuilder`, que es un patrón distinto:
 
 ```python
@@ -332,6 +359,11 @@ Tres cosas que esto te da y un prompt suelto no:
 3. **Es comparable entre corridas.** La misma rúbrica hoy y en tres meses.
 
 Y una métrica de las 7 **no usa LLM en absoluto**: `distance_compliance` es una regex que busca 26.2 millas. Si el plan dice 24 millas, el score es 1 y no hay modelo que lo salve. Mezclar juez-LLM con checks determinísticos es la idea de fondo del diseño.
+
+**Qué mirar en las próximas celdas:** primero los pesos; después un plan con
+promedio alto que igual queda rechazado; finalmente la diferencia entre el
+juez real y el fallback heurístico. Son tres capas distintas: configuración,
+regla de negocio y resiliencia operativa.
 ''')
 
 code(r'''
@@ -514,6 +546,11 @@ md(r'''
 
 Acá hay una lección que no está en el codelab.
 
+> **Guion para explicar:** “El modelo decide *cuándo* necesita una ruta, pero no
+> debe inventar coordenadas. La geometría sale de una herramienta determinística.
+> Esta separación entre razonamiento y cálculo es lo que vuelve verificable al
+> agente.”
+
 El instruction del Planner dice: *"Route Design: GeoJSON via `plan_marathon_route` tool"*. El `SKILL.md` de `route-planning` dice que `tools.py` contiene esa función. Y `get_tools()` la carga así:
 
 ```python
@@ -527,6 +564,11 @@ if plan_marathon_route_func:
 Es el bug más instructivo de todo el codelab: **una tool que falta en silencio no se ve como un error, se ve como una alucinación.** Cuando un agente invente datos, la primera pregunta no es "¿qué modelo uso?" sino "¿la tool está realmente cargada?".
 
 En este repo el archivo existe: red vial por ciudad, Dijkstra, cierre de loop sobre los 42.195 km y GeoJSON de salida.
+
+Cuando ejecutes 2.1, señalá tres datos: `network_source` demuestra de dónde salió
+la red; `raw_network_distance_km` es la distancia realmente recorrida sobre el
+grafo; `course_adjustment_km` hace explícito el pequeño ajuste para certificar
+42.195 km. En 2.2, ese mismo GeoJSON se vuelve mapa: no es una segunda ruta.
 ''')
 
 code(r'''
@@ -622,19 +664,48 @@ m
 # ---------------------------------------------------------------------------
 md(r'''
 ---
-## Paso 3 — Los tres agentes y el protocolo A2A
+## Paso 3 — Cuatro agentes y dos límites de proceso
 
 Hasta acá corrimos piezas sueltas. Ahora las conectamos.
 
-El Planner arma sus tools con **tres patrones distintos**, y esa es la clase entera:
+El sistema combina **cuatro patrones**. La ubicación importa porque determina
+latencia, costo y tipos de falla:
 
 | Patrón | Qué conecta | Dónde corre |
 |---|---|---|
 | `SkillToolset` | conocimiento procedural (`SKILL.md` + referencias) | en el proceso |
 | `AgentTool(agent=evaluator_agent)` | el Evaluator como sub-agente | en el proceso |
 | `RemoteA2aAgent(agent_card=...)` | el Simulator | **otro proceso, por HTTP** |
+| `AgentTool(agent=runner_agent)` | el Runner como sub-agente del Simulator | en el proceso del Simulator |
 
-El tercero es el interesante. El Simulator no es un import: es un servidor con su propia **agent card** en `/.well-known/agent-card.json`, al que el Planner le habla por JSON-RPC. Podría estar en otra máquina, en Cloud Run o en Agent Engine y el código del Planner no cambia una línea.
+El tercer patrón cruza la frontera de red. El Simulator no es un import del
+Planner: es un servidor con su propia **agent card** en
+`/.well-known/agent-card.json`, al que el Planner le habla por JSON-RPC. Podría
+estar en otra máquina, en Cloud Run o en Agent Engine y el código del Planner
+no cambia una línea.
+
+El cuarto patrón vuelve a entrar en un proceso local: cuando el Simulator recibe
+el plan, delega a `runner_agent`. Así obtenemos una cadena anidada:
+
+`Planner → Simulator (A2A) → Runner (AgentTool)`
+
+> **Guion para explicar:** “A2A no significa que todo deba ser remoto. Usamos
+> red cuando necesitamos independencia de despliegue; usamos AgentTool cuando
+> queremos delegación semántica sin pagar el costo y la fragilidad de otra red.”
+
+### Qué representa el Runner Agent
+
+| Cohorte | Proporción inicial | Qué nos ayuda a observar |
+|---|---:|---|
+| Elite | 1% | velocidad, acceso limpio a puestos y cierre temprano |
+| Competitive | 14% | ritmo alto sostenido y demanda de hidratación |
+| Main pack | 60% | congestión, olas de largada y capacidad operativa |
+| Back of pack | 25% | fatiga, tiempo prolongado en circuito y cobertura médica tardía |
+
+La función determinística calcula cantidad, ritmo, llegada, abandono y riesgo.
+El agente no modifica esos números: los interpreta y los convierte en hallazgos
+operativos. Esta separación permite explicar qué parte es **simulación** y qué
+parte es **razonamiento del agente**.
 
 Y la bisagra entre los dos modos es **una variable de entorno**:
 
@@ -647,12 +718,16 @@ if os.environ.get("SIMULATOR_AGENT_RESOURCE_NAME"):
 - `local:8089` → servidor local
 - `projects/.../reasoningEngines/123` → Agent Engine en producción
 
-**Mismo binario, misma imagen, distinta topología.** El olvido más común del workshop es reiniciar el Planner sin esa variable y no entender por qué el Simulator nunca contesta: el banner de arranque te dice `SOLO` o `FULL TEAM` justamente por eso.
+**Mismo binario, distinta topología.** El olvido más común del workshop es
+reiniciar el Planner sin esa variable y no entender por qué el Simulator —y por
+lo tanto el Runner que vive detrás suyo— nunca contestan. El banner de arranque
+te dice `SOLO` o `FULL TEAM` justamente por eso.
 ''')
 
 code(r'''
 # @title 3.1 — Levantar el Simulation Controller (:8089) { display-mode: "form" }
-# En el codelab esto es una segunda pestaña de Cloud Shell. Acá es un proceso más.
+# En el codelab esto es una segunda pestaña de Cloud Shell. Acá es un proceso
+# que contiene dos agentes: Simulator + Runner.
 
 import os, socket, subprocess, time
 
@@ -707,7 +782,7 @@ code(r'''
 # @title 3.3 — Levantar el Planner en modo FULL TEAM (:8084) { display-mode: "form" }
 # La variable de entorno es TODA la diferencia entre Solo y Full Team.
 
-MODO = "FULL TEAM (Planner + Evaluator + Simulator)"  # @param ["FULL TEAM (Planner + Evaluator + Simulator)", "SOLO (Planner + Evaluator)"]
+MODO = "FULL TEAM (Planner + Evaluator + Simulator + Runner)"  # @param ["FULL TEAM (Planner + Evaluator + Simulator + Runner)", "SOLO (Planner + Evaluator)"]
 
 planner_env = {**os.environ, "PYTHONUNBUFFERED": "1"}
 if MODO.startswith("FULL"):
@@ -896,8 +971,16 @@ md(r"""
 
 En la ADK Dev UI elegí `planner_agent`, abrí una sesión nueva y pegá el pedido
 completo de abajo. No le pidas solamente "una maratón en Buenos Aires": nombrar
-la distancia, el punto de largada y los dos agentes obliga a recorrer toda la
+la distancia, el punto de largada y las delegaciones obliga a recorrer toda la
 arquitectura del workshop.
+
+**Qué estamos probando con este texto:**
+
+- que el Planner use herramientas en vez de inventar la ruta;
+- que el Evaluator juzgue el plan una sola vez;
+- que el Simulator sea alcanzado por A2A;
+- que el Simulator delegue al Runner y devuelva la experiencia de cuatro
+  cohortes representativas.
 """)
 
 code(r'''
@@ -907,7 +990,7 @@ PEDIDO_BUENOS_AIRES = """Plan a scenic marathon in Buenos Aires for 30,000 runne
 
 Create a certified-distance route of 26.2 miles (42.195 km), starting and finishing at the Obelisco. Use the route-planning tool and include the calculated waypoints, hydration stations, medical tents, traffic closures, community impact, logistics, finances, timeline, and risks.
 
-Then send the complete plan to evaluator_agent for scoring and afterward to simulator_agent for the final readiness verdict. Include the evaluation scores, overall score, and simulation verdict in the final response."""
+Then send the complete plan to evaluator_agent for scoring and afterward to simulator_agent for the final readiness verdict. Ask simulator_agent to delegate runner experience to runner_agent for elite, competitive, main-pack, and back-of-pack cohorts. Include the evaluation scores, overall score, simulation verdict, runner readiness, and runner findings in the final response."""
 
 print(PEDIDO_BUENOS_AIRES)
 print("\n→ Copiá este texto, volvé a la ADK Dev UI y envialo a planner_agent.")
@@ -920,7 +1003,7 @@ md(r'''
 ---
 ## Paso 4 — El pedido real
 
-Acá está el otro agujero del codelab: su paso final "Deploy and test the multi-agent system" **nunca manda un mensaje**. La única verificación es un `curl` a la agent card. O sea: comprobás que el servidor arrancó, no que los tres agentes colaboran.
+Acá está el otro agujero del codelab: su paso final "Deploy and test the multi-agent system" **nunca manda un mensaje**. La única verificación es un `curl` a la agent card. O sea: comprobás que el servidor arrancó, no que los cuatro agentes colaboran.
 
 Lo que sigue es un `message/send` de A2A de verdad. La secuencia que vas a ver (verificada — en la corrida de ensayo fueron **17 eventos en 57 segundos**):
 
@@ -929,10 +1012,14 @@ Lo que sigue es un `message/send` de A2A de verdad. La secuencia que vas a ver (
 3. `add_water_stations`, `add_medical_tents` — logística con números calculados.
 4. Redacta el plan completo (tráfico, comunidad, economía, timeline, riesgos).
 5. `evaluator_agent` — sub-agente **en proceso** (`AgentTool`): 7 métricas en Vertex AI Evaluation.
-6. `simulator_agent` — agente **remoto** (`RemoteA2aAgent`, HTTP al `:8089`): veredicto de readiness.
-7. Devuelve el plan con scores y veredicto.
+6. `simulator_agent` — agente **remoto** (`RemoteA2aAgent`, HTTP al `:8089`): checklist de readiness.
+7. `runner_agent` — sub-agente local del Simulator: simula cohortes elite, competitiva, pelotón principal y último pelotón.
+8. Devuelve el plan con scores, veredicto y hallazgos desde la perspectiva de los corredores.
 
-Con `gemini-3.1-flash-lite` tarda **alrededor de 1 minuto**. Si usás el `gemini-3.1-pro-preview` del codelab como juez, contá 2-5. El silencio largo siempre es el Evaluator: no es que se colgó.
+Con `gemini-3.1-flash-lite` tarda alrededor de uno o dos minutos. Si usás el
+`gemini-3.1-pro-preview` como juez, contá más. El Runner agrega una delegación,
+pero sus cifras salen de una función determinística: el modelo solamente las
+interpreta desde la experiencia del corredor.
 
 > Truco para la sala: la celda 4.2 muestra la traza etiquetada de qué hizo cada agente. Corrala en cuanto termine esta.
 ''')
@@ -963,7 +1050,7 @@ print(f"\n⏱  {time.time() - t0:.0f}s   exit={proc.returncode}")
 ''')
 
 code(r'''
-# @title 4.2 — Qué pasó por dentro: la traza de los tres agentes { display-mode: "form" }
+# @title 4.2 — Qué pasó por dentro: la traza de los cuatro agentes { display-mode: "form" }
 # Corré esto DESPUÉS (o en paralelo, en otra pestaña) para mostrar la coreografía.
 
 import re
@@ -983,10 +1070,10 @@ for linea in log.splitlines():
             print(f"[{etiqueta:5s}] {linea.strip()[:150]}")
             break
 
-print("\n--- log del Simulator ---")
+print("\n--- log del Simulator (acá también vive runner_agent) ---")
 sim = open(f"{LOGS}/simulator.log").read()
-for linea in sim.splitlines()[-25:]:
-    if linea.strip():
+for linea in sim.splitlines()[-80:]:
+    if linea.strip() and re.search(r"runner_agent|simulate_runner_cohorts|function|tool|error", linea, re.I):
         print(" ", linea.strip()[:150])
 ''')
 
@@ -999,7 +1086,12 @@ funciona siempre.
 
 Manda el pedido, transmite cada evento y dibuja la secuencia en orden, con quién lo originó y cuánto tardó.
 
-Es la vista que cierra el workshop, porque hace visible lo único que no se ve en el texto final: que hubo **tres agentes distintos**, que el Evaluator corrió *dentro* del proceso del Planner y que el Simulator contestó *por HTTP*. En la salida vas a poder señalar con el dedo el momento exacto en que el Planner deja de trabajar y delega.
+Esta vista hace visible la primera capa de delegación: el Evaluator corre dentro
+del proceso del Planner y el Simulator contesta por HTTP. El Runner está un nivel
+más abajo, dentro del proceso remoto del Simulator; por eso no aparece como una
+fila propia en el stream del Planner. Lo verificamos en el log del Simulator y
+en los `runner_findings` del resultado final. Esta diferencia también enseña
+observabilidad: un trace solo muestra lo que cruza su frontera.
 
 > Necesita la celda 3.4 corrida (la UI levantada en el :8000).
 """)
@@ -1015,7 +1107,7 @@ PEDIDO = globals().get("PEDIDO_BUENOS_AIRES", '''Plan a scenic marathon in Bueno
 
 Create a certified-distance route of 26.2 miles (42.195 km), starting and finishing at the Obelisco. Use the route-planning tool and include the calculated waypoints, hydration stations, medical tents, traffic closures, community impact, logistics, finances, timeline, and risks.
 
-Then send the complete plan to evaluator_agent for scoring and afterward to simulator_agent for the final readiness verdict. Include the evaluation scores, overall score, and simulation verdict in the final response.''')  # @param {type:"string"}
+Then send the complete plan to evaluator_agent for scoring and afterward to simulator_agent for the final readiness verdict. Ask simulator_agent to delegate runner experience to runner_agent for elite, competitive, main-pack, and back-of-pack cohorts. Include the evaluation scores, overall score, simulation verdict, runner readiness, and runner findings in the final response.''')  # @param {type:"string"}
 
 BASE = f"http://127.0.0.1:{ADK_PORT}"
 sid = httpx.post(f"{BASE}/apps/planner_agent/users/user/sessions", json={}, timeout=30).json()["id"]
@@ -1073,9 +1165,9 @@ for t, autor, verbo, nombre, tipo, donde in filas:
         f'<td style="padding:6px 10px;color:#666">{tipo}</td>'
         f'<td style="padding:6px 10px;color:#888">{donde}</td></tr>')
 html.append('</table><p style="color:#666;font-size:13px;margin-top:10px">'
-            'Las dos filas en negrita son la clase entera: <b>evaluator_agent</b> corre dentro de este '
+            'Las dos filas en negrita muestran la primera delegación: <b>evaluator_agent</b> corre dentro de este '
             'mismo proceso (AgentTool) y <b>simulator_agent</b> vive en otro, alcanzado por A2A sobre '
-            'HTTP. El Planner los llama igual: no sabe dónde están.</p></div>')
+            'HTTP. Dentro del Simulator, <b>runner_agent</b> vuelve a usar AgentTool; su detalle queda del otro lado de la frontera A2A.</p></div>')
 display(HTML("".join(html)))
 
 print("=" * 70)
@@ -1087,15 +1179,26 @@ print(final)
 md(r"""
 ### 4.4 — Buenos Aires en carrera: mapa y corredores animados 🏃
 
-La ADK Dev UI muestra la conversación y la traza técnica, no la ciudad. Esta
-celda convierte la salida determinística de `plan_marathon_route` en la vista
-del evento: circuito, landmarks, hidratación, puestos médicos y corredores
-animados.
+La ADK Dev UI muestra conversación y trazas, no la ciudad. Esta celda une dos
+resultados verificables:
 
-Los puntos móviles son una **muestra visual** del pelotón de 30.000 personas;
-no son 120 agentes LLM. La simulación completa del keynote usa además un
-gateway Go, Redis, WebSockets y agentes Runner. Acá mantenemos el workshop
-liviano y usamos exactamente el GeoJSON calculado por este Planner.
+1. El **Planner** aporta el GeoJSON de la ruta, hidratación y puestos médicos.
+2. El **Runner Agent** aporta cuatro cohortes con ritmo, tiempo estimado,
+   hidratación, abandono proyectado y nivel de riesgo.
+
+El mapa usa una muestra de puntos para que el movimiento sea legible. Cada
+punto no es una llamada al modelo: color y velocidad representan una cohorte.
+Para que esta celda también funcione si saltaste la llamada en vivo, vuelve a
+ejecutar **la misma herramienta determinística** que usa el Runner Agent; no
+hace una llamada LLM adicional. La tabla y el reloj del mapa consumen esos
+mismos tiempos, así que no hay dos simulaciones contradictorias.
+La simulación completa del keynote sí agrega gateway Go, Redis, WebSockets y
+muchos agentes Runner. Acá usamos **un Runner Agent de cohortes**: es real como
+frontera de delegación, pero barato y explicable para un workshop.
+
+> **Guion para explicar:** “Primero vemos decisiones en el trace; ahora vemos
+> consecuencias sobre personas. El Planner piensa en el evento. El Runner piensa
+> en cómo ese evento se siente kilómetro a kilómetro.”
 """)
 
 code(r'''
@@ -1115,6 +1218,7 @@ if "route_tools" not in globals():
     spec.loader.exec_module(route_tools)
 
 from src.planner_agent.visualization import build_animated_race_map
+from src.runner_agent.agent.tools import simulate_runner_cohorts
 
 ruta_visual = route_tools.plan_marathon_route(
     "Buenos Aires", start_landmark="Obelisco", target_distance_km=42.195
@@ -1126,10 +1230,33 @@ med_visual = route_tools.add_medical_tents(
     total_distance_km=42.195, participants=PARTICIPANTES_VISUAL
 )
 
+plan_para_corredores = globals().get("final") or globals().get("PLAN_COMPLETO") or (
+    f"Buenos Aires marathon for {PARTICIPANTES_VISUAL:,} runners, 26.2 miles "
+    "(42.195 km), wave starts, chip timing, hydration every 2.5 km, medical "
+    "tents, ambulances and emergency access."
+)
+reporte_corredores = simulate_runner_cohorts(
+    plan_para_corredores, participants=PARTICIPANTES_VISUAL
+)
+
 print("✓ GeoJSON del Planner cargado")
 print(f"✓ {agua_visual['water_station_count']} puestos de hidratación")
 print(f"✓ {med_visual['medical_tent_count']} puestos médicos")
 print(f"✓ {CORREDORES_VISUALES} corredores animados representan {PARTICIPANTES_VISUAL:,} participantes")
+print(f"✓ Runner Agent: {reporte_corredores['runner_readiness']} · "
+      f"{reporte_corredores['projected_finishers']:,} llegadas proyectadas\n")
+
+print(f"{'cohorte':18s} {'corredores':>10s} {'ritmo':>9s} {'llegada':>9s} {'riesgo':>9s}")
+print("-" * 62)
+for cohorte in reporte_corredores["cohorts"]:
+    minutos = cohorte["projected_finish_minutes"]
+    llegada = f"{minutos // 60:d}h {minutos % 60:02d}m"
+    print(f"{cohorte['cohort']:18s} {cohorte['runners']:10,d} "
+          f"{cohorte['pace_min_per_km']:7.2f}/km {llegada:>9s} {cohorte['risk']:>9s}")
+
+print("\nHallazgos del Runner Agent:")
+for hallazgo in reporte_corredores["findings"]:
+    print(f"  · {hallazgo}")
 print("\nUsá Pausar, Reiniciar y 1×/2×/4× en el panel del mapa.\n")
 
 mapa_carrera = build_animated_race_map(
@@ -1138,6 +1265,7 @@ mapa_carrera = build_animated_race_map(
     med_visual,
     participants=PARTICIPANTES_VISUAL,
     runner_count=CORREDORES_VISUALES,
+    cohort_results=reporte_corredores["cohorts"],
 )
 mapa_carrera
 ''')
@@ -1153,7 +1281,11 @@ Un sistema multiagente que solo mostrás cuando funciona no enseña nada. Los do
 
 **A. Matar el juez.** Reiniciamos el Planner con `EVAL_MODE=heuristic`. Vertex AI Eval deja de usarse por completo y el sistema **sigue contestando**, más rápido y peor. La evaluación híbrida deja de ser un bullet de slide y pasa a ser un comportamiento que la sala vio.
 
-**B. Apagar el tercer agente.** Matamos el Simulator y mandamos el mismo pedido. El Planner intenta el A2A, falla y tiene que arreglárselas. Acá se ve la diferencia real entre un sub-agente en proceso (`AgentTool`, no puede fallar por red) y uno remoto (`RemoteA2aAgent`, sí puede) — que es exactamente la clase de falla que tenés en producción y no en tu notebook.
+**B. Apagar el proceso remoto.** Matamos el Simulator y mandamos el mismo
+pedido. El Planner pierde dos capacidades de una vez: el gate del Simulator y
+el Runner que vive dentro de ese proceso. Acá se ve la diferencia real entre un
+sub-agente local (`AgentTool`, sin falla de red) y uno remoto
+(`RemoteA2aAgent`, con falla de red).
 
 Corré A, B o los dos según cómo venga el tiempo.
 ''')
@@ -1236,14 +1368,26 @@ md(r'''
 
 Lo que quedó construido:
 
-- **ADK**: `LlmAgent` con `static_instruction`, salida estructurada con Pydantic y `ThinkingConfig` calibrado por tarea — 2048 para planificar, 1024 para juzgar, **0** para un checklist. El presupuesto de razonamiento es una decisión de diseño, no un default.
+- **Cuatro agentes, cuatro responsabilidades**: Planner diseña; Evaluator juzga;
+  Simulator habilita; Runner representa la experiencia del pelotón.
+- **ADK**: `LlmAgent` con `static_instruction`, salida estructurada con Pydantic
+  y `ThinkingConfig` calibrado por tarea. El presupuesto de razonamiento es una
+  decisión de diseño, no un default.
 - **Vertex AI Evaluation**: 7 métricas propias con `MetricPromptBuilder`, seis con juez LLM y una determinística, con rúbricas explícitas y fallback heurístico.
-- **A2A**: un agente remoto que se descubre por su agent card y se enchufa con una variable de entorno.
+- **A2A + AgentTool**: el Planner cruza la red hacia Simulator; Simulator delega
+  localmente hacia Runner. Dos mecanismos para dos límites distintos.
+- **Simulación de cohortes**: un cálculo determinístico da cifras estables para
+  elite, competitivos, pelotón principal y último pelotón; Runner Agent las
+  interpreta sin inventarlas.
 - **ADK Skills**: conocimiento procedural en archivos, no en el prompt.
 
 ### Lo que NO quedó demostrado (decilo en voz alta)
 
 **Memory Bank no está funcionando.** `VertexAiMemoryBankService` necesita un Agent Engine; sin `AGENT_ENGINE_ID` el `auto_save_memories` corta al primer `if` y todo corre en `InMemorySessionService`. El código está listo para producción, pero acá no persistió nada. Presentalo como "esta es la línea que cambiás al desplegar", nunca como una feature andando.
+
+Tampoco hay 30.000 agentes LLM individuales. El Runner Agent modela cuatro
+cohortes y el mapa dibuja una muestra visual. Decirlo explícitamente fortalece
+la demo: muestra dónde elegimos fidelidad y dónde elegimos costo controlado.
 
 ### Para seguir
 

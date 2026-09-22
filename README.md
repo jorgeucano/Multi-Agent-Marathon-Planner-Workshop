@@ -2,16 +2,17 @@
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/jorgeucano/Multi-Agent-Marathon-Planner-Workshop/blob/main/notebooks/marathon_agents_workshop.ipynb)
 
-Three ADK agents that plan a city marathon together: a **Planner** that
+Four ADK agents that plan and simulate a city marathon together: a **Planner** that
 orchestrates, an **Evaluator** that scores the plan with Vertex AI Evaluation
-(LLM-as-Judge), and a **Simulation Controller** that clears it for simulation —
-the last one reached over the **A2A protocol**.
+(LLM-as-Judge), a **Simulation Controller** reached over the **A2A protocol**,
+and a **Runner Cohort Agent** inside the Simulator that models how four
+representative groups experience the race.
 
 Runnable reconstruction of the Google Codelab
 [Build a Multi-Agent Marathon Planner with ADK and A2A](https://codelabs.developers.google.com/next26/dev-keynote/build-multi-agent-marathon-planner),
 packaged for teaching it as a workshop: every step is a git tag, the files the
 codelab forgets to create are included, and there is a client that actually
-exercises the three agents end to end.
+exercises the four agents end to end.
 
 > Read [docs/GOTCHAS.md](docs/GOTCHAS.md) before you teach this. It lists every
 > place this repo deviates from the codelab and why — including the tool the
@@ -21,19 +22,18 @@ exercises the three agents end to end.
                         ┌──────────────────────┐
    your request ──────► │    planner_agent     │  gemini-3-flash-preview
                         │  (lead orchestrator) │  thinking_budget=2048
-                        └───┬──────────────┬───┘
-            AgentTool       │              │      A2A / JSON-RPC
-         (local sub-agent)  │              │      :8089
-                        ┌───▼──────┐   ┌───▼──────────────────┐
-                        │evaluator │   │ simulator_agent      │
-                        │  agent   │   │ (own A2A server)     │
-                        │ pro 3.1  │   │ flash, thinking=0    │
-                        │ budget=1024  │ deterministic check  │
-                        └───┬──────┘   └──────────────────────┘
-                            │
-                    Vertex AI Evaluation
-                    7 custom metrics (MetricPromptBuilder)
-                    + heuristic fallback
+                        └───────┬──────────────┬───┘
+                  AgentTool    │              │ A2A / JSON-RPC :8089
+                  same process │              │ separate process
+                           ┌────▼─────┐   ┌────▼────────────────┐
+                           │evaluator │   │ simulator_agent     │
+                           │  agent   │   │ readiness gate      │
+                           │7 metrics │   └──────────┬──────────┘
+                           └──────────┘              │ AgentTool
+                                              ┌─────▼───────────┐
+                                              │ runner_agent    │
+                                              │ four cohorts    │
+                                              └─────────────────┘
 ```
 
 ## Quickstart
@@ -78,7 +78,7 @@ lightweight workshop visualization, not the keynote's full Angular/Three.js
 simulation (which also requires the Go gateway, Redis, WebSockets, and Runner
 agents from `GoogleCloudPlatform/race-condition`).
 
-### Full Team mode — all three agents over A2A
+### Full Team mode — four agents, one A2A boundary
 
 ```bash
 # terminal 1
@@ -92,7 +92,7 @@ SIMULATOR_AGENT_RESOURCE_NAME=local:8089 \
 uv run python scripts/send_request.py --city Austin --theme charity --watch
 ```
 
-The planner's log should show both lines:
+The Planner log should show both lines:
 
 ```
 Added local Evaluator tool
@@ -100,7 +100,8 @@ Added A2A Simulation Controller tool
 ```
 
 If the second one is missing you forgot `SIMULATOR_AGENT_RESOURCE_NAME` — that
-is the single most common mistake in this workshop.
+is the single most common mistake in this workshop. The Simulator startup has
+its own `Tools:` line; `AgentTool` there is the local `runner_agent` delegation.
 
 ## Layout
 
@@ -118,6 +119,8 @@ src/
     skills/       review-marathon-plan/
     services/     memory_manager, session_manager
     runtime/      agent_card, agent_executor, local_server  (:8089)
+  runner_agent/
+    agent/        cohort instruction + deterministic pace/fatigue tool
 scripts/
   preflight.py                      pre-workshop environment check
   send_request.py                   A2A client — the actual end-to-end demo
@@ -135,7 +138,7 @@ docs/
 | `GOOGLE_CLOUD_LOCATION` | no | default `us-central1` |
 | `GOOGLE_GENAI_USE_VERTEXAI` | yes | `true` — use Vertex, not AI Studio |
 | `SIMULATOR_AGENT_RESOURCE_NAME` | no | `local:8089` or an Agent Engine resource name. Unset = Solo mode |
-| `PLANNER_MODEL` / `EVALUATOR_MODEL` / `SIMULATOR_MODEL` | no | escape hatch when a preview model moves |
+| `PLANNER_MODEL` / `EVALUATOR_MODEL` / `SIMULATOR_MODEL` / `RUNNER_MODEL` | no | per-agent model override |
 | `EVAL_MODE` | no | `heuristic` forces the fallback path (fast, no judge calls) |
 | `AGENT_ENGINE_ID` | no | enables Memory Bank + persistent sessions |
 | `USE_ADK_EXECUTOR` | no | `1` runs the planner on ADK's generic A2A executor |

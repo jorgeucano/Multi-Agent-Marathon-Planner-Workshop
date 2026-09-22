@@ -38,4 +38,9 @@ async def check_plan_readiness(plan_text: str) -> dict[str, Any]:
 
 
 def get_tools() -> list:
-    return [check_plan_readiness]
+    # Imported lazily so the deterministic checklist remains usable in the
+    # offline test suite without constructing an ADK agent at module import.
+    from google.adk.tools.agent_tool import AgentTool
+    from ...runner_agent.agent import root_agent as runner_agent
+
+    return [check_plan_readiness, AgentTool(agent=runner_agent)]

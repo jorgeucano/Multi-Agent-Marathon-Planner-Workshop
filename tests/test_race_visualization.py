@@ -42,3 +42,19 @@ def test_animated_map_contains_route_controls_and_markers():
     assert "WS-01" in html
     assert "MED-01" in html
     assert "42.195 km" in html
+
+
+def test_animated_map_uses_runner_cohort_finish_times():
+    cohorts = [
+        {"cohort": "elite", "share": 0.01, "projected_finish_minutes": 131},
+        {"cohort": "competitive", "share": 0.14, "projected_finish_minutes": 181},
+        {"cohort": "main_pack", "share": 0.60, "projected_finish_minutes": 241},
+        {"cohort": "back_of_pack", "share": 0.25, "projected_finish_minutes": 311},
+    ]
+    race_map = build_animated_race_map(
+        _route(), {"stations": []}, {"tents": []}, cohort_results=cohorts
+    )
+    html = race_map.get_root().render()
+    assert '"finishMinutes":131' in html
+    assert '"finishMinutes":311' in html
+    assert "raceDurationMinutes" in html

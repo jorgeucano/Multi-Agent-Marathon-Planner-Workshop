@@ -79,6 +79,7 @@ def main() -> int:
         "PLANNER_MODEL": os.environ.get("PLANNER_MODEL", "gemini-3-flash-preview"),
         "EVALUATOR_MODEL": os.environ.get("EVALUATOR_MODEL", "gemini-3.1-pro-preview"),
         "SIMULATOR_MODEL": os.environ.get("SIMULATOR_MODEL", "gemini-3-flash-preview"),
+        "RUNNER_MODEL": os.environ.get("RUNNER_MODEL", "gemini-3-flash-preview"),
     }
     if project:
         try:
@@ -113,6 +114,7 @@ def main() -> int:
         "src/planner_agent/skills/route-planning/tools.py",
         "src/planner_agent/skills/plan-evaluation/SKILL.md",
         "src/simulator_agent/skills/review-marathon-plan/SKILL.md",
+        "src/runner_agent/agent/tools.py",
     ):
         check(rel, OK if (root / rel).exists() else FAIL, "" if (root / rel).exists() else "missing")
 

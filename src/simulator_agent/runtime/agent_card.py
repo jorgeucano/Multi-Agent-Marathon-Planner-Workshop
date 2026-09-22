@@ -23,11 +23,14 @@ def create_simulation_controller_card() -> AgentCard:
     skill = AgentSkill(
         id="review_marathon_plan",
         name="Review Marathon Plan",
-        description="Review a marathon plan for simulation readiness.",
-        tags=["simulation", "review", "approval", "marathon"],
+        description="Review a marathon plan and simulate representative runner cohorts.",
+        tags=["simulation", "review", "approval", "marathon", "runners"],
     )
     return create_agent_card(
         agent_name="simulator_agent",
-        description="Simulation Controller Agent - Reviews marathon plans for simulation readiness.",
+        description=(
+            "Simulation Controller Agent - Reviews plans for readiness and delegates "
+            "runner experience analysis to a local Runner Cohort Agent."
+        ),
         skills=[skill],
     )

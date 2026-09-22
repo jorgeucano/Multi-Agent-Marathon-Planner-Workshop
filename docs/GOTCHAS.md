@@ -151,7 +151,8 @@ a working system.
 **Here:** upper bounds in `pyproject.toml` (`google-adk>=1.25,<2`,
 `a2a-sdk>=0.3.9,<1`, `google-cloud-aiplatform>=1.121,<2`), which resolve to
 adk 1.39.1 / a2a-sdk 0.3.26 / aiplatform 1.165.1 — all 31 symbols present, all
-three agents construct, both servers start, the A2A round trip completes.
+four agents construct, both servers start, and the nested A2A/AgentTool round
+trip completes.
 `uv.lock` is committed so every attendee gets exactly what was rehearsed.
 
 > Note on a false alarm: `vertexai.types` fails under
@@ -191,12 +192,11 @@ lock file matters.
 Every Gemini 3.x model is served from `location=global`. The codelab hard-codes
 `GOOGLE_CLOUD_LOCATION=us-central1`, so a fresh follower gets three 404s at the
 first model call — after 40 minutes of setup. `scripts/preflight.py` pings all
-three models and fails here, before anything else.
+four model configurations and fails here, before anything else.
 
-**Here:** `.env.example` uses `global` and `gemini-3.1-flash-lite` for all
-three agents. Full Team run completes in ~57 s with it. The preview pair from
-the codelab also works in `global` if you want fidelity — the `pro` judge is
-slower and pricier.
+**Here:** `.env.example` uses `global` and `gemini-3.1-flash-lite` for all four
+agents. The preview pair from the codelab also works in `global` if you want
+fidelity — the `pro` judge is slower and pricier.
 
 ### 12. The Evaluator is the slow part
 
@@ -347,6 +347,10 @@ for a module Python has already cached. Restart the runtime in that case.
 - The road networks in `route-planning/tools.py` are hand-built, not OSM. The
   reported course is the certified 42.195 km with the adjustment stated
   explicitly in `course_adjustment_km` — do not present it as a surveyed course.
+- `runner_agent` is one real ADK agent that interprets four deterministic
+  cohorts. It is not 30,000 independent LLM agents. The animated dots are a
+  visual sample of those cohorts; this is the deliberate workshop-scale version
+  of the keynote's Runner fleet.
 - The full pipeline has **not** been run against live Vertex AI from here. The
   offline suite (`tests/`) passes; the GCP path needs one real run in your own
   project before you teach. That run is the whole of day-before prep.

@@ -35,14 +35,14 @@ pre-warmed fallback.
 
 | Min | Block | What happens on screen | Fallback |
 |---:|---|---|---|
-| 0-4 | Framing | Three agents, one request. Why not one prompt. | — |
+| 0-4 | Framing | Four agents, one request. Separate design, judgment, readiness and runner experience. | — |
 | 4-8 | The bug that teaches | `git tag -l`, then GOTCHAS #2: the tool the codelab calls but never writes. "A missing tool looks like a hallucination, not an error." | — |
 | 8-18 | The Evaluator | `evaluator/tools.py`: one `MetricPromptBuilder` on screen. Then `tests/test_evaluator_scoring.py::test_high_severity_finding_blocks_a_pass` — 95 average, still fails. | Offline, always works |
 | 18-26 | The route | `plan_marathon_route("Buenos Aires")` in a REPL: waypoints, closure severity, 42.195 km with the adjustment stated. | Offline |
-| 26-34 | Wiring | `agent/tools.py::get_tools()`: SkillToolset / AgentTool / RemoteA2aAgent side by side. Start the simulator, `curl` its agent card. | — |
-| 34-40 | One env var | Start the planner **without** the var (banner: `SOLO`), Ctrl+C, start **with** it (banner: `FULL TEAM`, 7 tools). | — |
-| 40-50 | The run | Paste the complete Buenos Aires request from cell 3.6, then show the event-by-event choreography: `plan_marathon_route`, `evaluator_agent` (AgentTool, same process), `simulator_agent` (A2A, HTTP). | `EVAL_MODE=heuristic` pre-started in another tab |
-| 50-54 | Race view | Run cell 4.4: the Planner's GeoJSON becomes an animated Buenos Aires course with runners, water and medical posts. State clearly that the moving dots are a visual sample, not Runner agents. | Static map from cell 2.2 |
+| 26-34 | Wiring | Compare SkillToolset, local AgentTool, remote A2A and the nested Runner AgentTool. Start Simulator and point out that one process contains Simulator + Runner. | — |
+| 34-40 | One env var | Start Planner without the var (`SOLO`), then with it (`FULL TEAM`). Connecting Simulator also makes Runner reachable behind that boundary. | — |
+| 40-50 | The run | Paste the Buenos Aires request from cell 3.6. Follow Planner → Evaluator and Planner → Simulator → Runner. | `EVAL_MODE=heuristic` pre-started in another tab |
+| 50-54 | Race view | Run cell 4.4: explain four cohort rows, then map color and speed to them. Moving dots are visual representatives, not one LLM each. | Static map from cell 2.2 |
 | 54-58 | Break it | Kill the simulator, resend. What the planner does is in its *instruction*, not its code. | Skip if late |
 | 58-60 | Close | ThinkingConfig per task. Memory Bank is **not** demonstrated — say so. Repo + Colab link. | — |
 
@@ -82,9 +82,10 @@ uv run --extra dev pytest -q
    pass even though the average is high. That is `_build_result` doing real work.
 2. **Killing Vertex AI Eval mid-demo** (`EVAL_MODE=heuristic`). The system keeps
    answering. Hybrid evaluation stops being a slide and becomes a behaviour.
-3. **`SIMULATOR_AGENT_RESOURCE_NAME`.** Same binary, same code, one env var, and
-   a third agent joins over HTTP. Show the planner banner flipping from `SOLO`
-   to `FULL TEAM`.
+3. **One remote boundary, two capabilities.** `SIMULATOR_AGENT_RESOURCE_NAME`
+   connects the remote Simulator; the Runner becomes reachable behind it as a
+   local AgentTool. Kill that process and both disappear. This makes deployment
+   topology visible instead of leaving it as an architecture slide.
 
 ## Failure playbook
 

@@ -8,9 +8,8 @@ import os
 
 os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "true"
 
-# El wiring de tools loguea en import-time, antes de que uvicorn instale su
-# logging. Sin esto, las lineas "Added local Evaluator tool" / "Added A2A
-# Simulation Controller tool" nunca llegan al log y no podes verificar el modo.
+# Instala logging antes de importar el agente para que la salida de arranque y
+# cualquier error de wiring del Simulator o del Runner queden en el mismo log.
 import logging  # noqa: E402
 logging.basicConfig(
     level=logging.INFO,

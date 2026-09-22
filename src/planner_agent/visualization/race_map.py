@@ -35,12 +35,46 @@ def _position_on_route(latlon: list[list[float]], fraction: float) -> list[float
 class _RunnerAnimation(MacroElement):
     """Folium element that adds controls and animated runner markers."""
 
-    def __init__(self, latlon: list[list[float]], runner_count: int, participants: int):
+    def __init__(
+        self,
+        latlon: list[list[float]],
+        runner_count: int,
+        participants: int,
+        cohort_results: list[dict[str, Any]] | None = None,
+    ):
         super().__init__()
         self._name = "RunnerAnimation"
         route_json = json.dumps(latlon, separators=(",", ":"))
         runner_count = max(12, min(int(runner_count), 180))
         participants = max(1, int(participants))
+        colors = ("#00d4ff", "#ffca28", "#ff7043", "#7c4dff")
+        defaults = (
+            {"cohort": "elite", "share": 0.01, "projected_finish_minutes": 133},
+            {"cohort": "competitive", "share": 0.14, "projected_finish_minutes": 184},
+            {"cohort": "main_pack", "share": 0.60, "projected_finish_minutes": 243},
+            {"cohort": "back_of_pack", "share": 0.25, "projected_finish_minutes": 306},
+        )
+        labels = {
+            "elite": "Elite",
+            "competitive": "Competitivo",
+            "main_pack": "Pelotón principal",
+            "back_of_pack": "Último pelotón",
+        }
+        source_cohorts = cohort_results or list(defaults)
+        cohort_payload = []
+        cumulative_share = 0.0
+        for index, cohort in enumerate(source_cohorts[:4]):
+            cumulative_share += float(cohort.get("share", defaults[index]["share"]))
+            cohort_payload.append({
+                "name": labels.get(str(cohort.get("cohort")), str(cohort.get("cohort", "Cohorte"))),
+                "end": min(1.0, cumulative_share),
+                "color": colors[index],
+                "finishMinutes": int(cohort.get(
+                    "projected_finish_minutes", defaults[index]["projected_finish_minutes"]
+                )),
+            })
+        cohort_payload[-1]["end"] = 1.0
+        cohorts_json = json.dumps(cohort_payload, separators=(",", ":"), ensure_ascii=False)
 
         source = r"""
 {% macro script(this, kwargs) %}
@@ -66,22 +100,26 @@ class _RunnerAnimation(MacroElement):
     ];
   }
 
-  const colors = ['#00d4ff', '#ffca28', '#ff7043', '#7c4dff', '#26d07c'];
+  const cohorts = __COHORTS__;
+  const raceDurationMinutes = Math.max(...cohorts.map((cohort) => cohort.finishMinutes)) + 20;
   const runners = [];
   for (let i = 0; i < runnerCount; i += 1) {
+    const share = i / runnerCount;
+    const cohort = cohorts.find((candidate) => share < candidate.end) || cohorts[cohorts.length - 1];
     const marker = L.circleMarker(route[0], {
       radius: i < 8 ? 4.2 : 2.8,
       color: '#07131f',
       weight: 0.7,
-      fillColor: colors[i % colors.length],
+      fillColor: cohort.color,
       fillOpacity: 0.92,
       interactive: false,
       pane: 'markerPane',
     }).addTo(map);
     runners.push({
       marker,
-      delay: (i / runnerCount) * 0.17,
-      pace: 0.84 + ((i * 37) % 31) / 100,
+      delayMinutes: (i / runnerCount) * 20,
+      finishMinutes: cohort.finishMinutes * (0.97 + ((i * 37) % 7) / 100),
+      cohort: cohort.name,
       lane: ((i % 7) - 3) * 0.000025,
     });
   }
@@ -97,6 +135,7 @@ class _RunnerAnimation(MacroElement):
         <span><b id="race-clock">00:00</b> carrera</span>
       </div>
       <div class="race-note">${runnerCount} corredores visuales representan ${participants.toLocaleString('es-AR')}</div>
+      <div class="race-cohorts"><span style="--c:#00d4ff">Elite</span><span style="--c:#ffca28">Competitivo</span><span style="--c:#ff7043">Pelotón</span><span style="--c:#7c4dff">Últimos</span></div>
       <div class="race-actions">
         <button id="race-toggle">Pausar</button>
         <button data-speed="1" class="active">1×</button>
@@ -116,6 +155,8 @@ class _RunnerAnimation(MacroElement):
     .race-kicker{color:#00d4ff;font-size:10px;font-weight:800;letter-spacing:.18em}
     .race-title{font-size:20px;font-weight:800;margin:3px 0 10px}.race-stats{display:flex;gap:16px}
     .race-stats b{font-size:18px;color:#ffca28}.race-note{color:#b8c7d4;font-size:11px;margin:7px 0 10px}
+    .race-cohorts{display:flex;gap:8px;flex-wrap:wrap;color:#dce7ef;font-size:10px;margin:-3px 0 10px}
+    .race-cohorts span:before{content:'';display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--c);margin-right:4px}
     .race-actions{display:flex;gap:5px}.race-actions button{cursor:pointer;border:1px solid #ffffff30;
       border-radius:7px;background:#ffffff12;color:#fff;padding:5px 8px;font-weight:700}
     .race-actions button:hover,.race-actions button.active{background:#00d4ff;color:#07131f}
@@ -138,9 +179,11 @@ class _RunnerAnimation(MacroElement):
   function render(now) {
     if (playing) elapsed += (now - previous) * speed;
     previous = now;
-    const leaderProgress = Math.min(1, elapsed / durationMs);
+    const raceMinutes = Math.min(raceDurationMinutes, (elapsed / durationMs) * raceDurationMinutes);
+    let leaderProgress = 0;
     runners.forEach((runner) => {
-      const progress = Math.max(0, Math.min(1, (elapsed / durationMs) * runner.pace - runner.delay));
+      const progress = Math.max(0, Math.min(1, (raceMinutes - runner.delayMinutes) / runner.finishMinutes));
+      leaderProgress = Math.max(leaderProgress, progress);
       const point = routePoint(progress);
       point[0] += runner.lane;
       point[1] -= runner.lane;
@@ -148,10 +191,9 @@ class _RunnerAnimation(MacroElement):
       runner.marker.setStyle({fillOpacity: progress >= 1 ? 0.25 : 0.92});
     });
     panel.getContainer().querySelector('#race-km').textContent = (leaderProgress * 42.195).toFixed(1);
-    const raceMinutes = Math.floor(leaderProgress * 240);
     panel.getContainer().querySelector('#race-clock').textContent =
-      String(Math.floor(raceMinutes / 60)).padStart(2, '0') + ':' + String(raceMinutes % 60).padStart(2, '0');
-    if (leaderProgress >= 1) { playing = false; toggle.textContent = 'Finalizada'; }
+      String(Math.floor(raceMinutes / 60)).padStart(2, '0') + ':' + String(Math.floor(raceMinutes) % 60).padStart(2, '0');
+    if (raceMinutes >= raceDurationMinutes) { playing = false; toggle.textContent = 'Finalizada'; }
     requestAnimationFrame(render);
   }
   requestAnimationFrame(render);
@@ -161,6 +203,7 @@ class _RunnerAnimation(MacroElement):
         source = source.replace("__ROUTE__", route_json)
         source = source.replace("__RUNNER_COUNT__", str(runner_count))
         source = source.replace("__PARTICIPANTS__", str(participants))
+        source = source.replace("__COHORTS__", cohorts_json)
         self._template = Template(source)
 
 
@@ -171,6 +214,7 @@ def build_animated_race_map(
     *,
     participants: int = 30_000,
     runner_count: int = 120,
+    cohort_results: list[dict[str, Any]] | None = None,
 ) -> folium.Map:
     """Build an animated Folium map from the planner's deterministic outputs."""
     features = route.get("route_geojson", {}).get("features", [])
@@ -236,5 +280,7 @@ def build_animated_race_map(
         ).add_to(race_map)
 
     race_map.fit_bounds(latlon, padding=(24, 24))
-    race_map.add_child(_RunnerAnimation(latlon, runner_count, participants))
+    race_map.add_child(_RunnerAnimation(
+        latlon, runner_count, participants, cohort_results=cohort_results
+    ))
     return race_map

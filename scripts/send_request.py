@@ -2,7 +2,7 @@
 """Send a real marathon planning request to the Planner over A2A.
 
 NOT IN THE CODELAB. The codelab's "test the multi-agent system" step only curls
-the agent card - it never sends a message, so the three agents never actually
+the agent card - it never sends a message, so the four agents never actually
 talk. This is the client that makes the demo a demo.
 
 Usage:
@@ -37,8 +37,10 @@ def build_prompt(args) -> str:
     prompt = " ".join(bits) + "."
     prompt += (
         " Produce the full plan, then send it to the Evaluator for scoring and to the "
-        "Simulation Controller for the readiness verdict. Report the waypoints, the "
-        "per-criterion scores with the overall score, and the simulation verdict."
+        "Simulation Controller for the readiness verdict. Ask the Simulation Controller "
+        "to delegate runner experience to its Runner Agent. Report the waypoints, the "
+        "per-criterion scores with the overall score, the simulation verdict, runner "
+        "readiness, and the main runner findings."
     )
     return prompt
 
