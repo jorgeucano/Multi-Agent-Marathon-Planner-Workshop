@@ -806,6 +806,72 @@ print("ya probó que responde. La 4.3 muestra la misma coreografía sin proxy.")
 print("=" * 70)
 """)
 
+md(r"""
+### 3.5 — Plan B para la UI: un túnel que sí funciona
+
+Si el iframe de la 3.4 quedó en blanco, el problema es el proxy de Colab: devuelve
+`403` en los chunks de JavaScript de la interfaz. El HTML llega, el JS no.
+
+Un túnel evita el proxy por completo: expone el puerto 8000 de la VM en una URL
+pública propia. **Verificado**: HTML 200, chunks 200, API respondiendo.
+
+> ⚠️ **Esa URL es pública y sin autenticación.** Cualquiera que la tenga puede
+> usar tu agente y gastar tu cuota de Vertex AI. Es aleatoria y efímera, pero
+> mientras viva, está abierta. No la publiques en un chat, y apagá el túnel
+> cuando termines (la celda de Limpieza lo hace). Si esto te incomoda, saltealo:
+> la celda 4.3 muestra lo mismo sin exponer nada.
+""")
+
+code(r"""
+# @title 3.5 — Túnel público a la UI (opcional) { display-mode: "form" }
+
+ENTIENDO_QUE_ES_PUBLICO = False  # @param {type:"boolean"}
+
+import re, subprocess, time
+from IPython.display import HTML, display
+
+if not ENTIENDO_QUE_ES_PUBLICO:
+    raise SystemExit(
+        "Marcá la casilla de arriba para confirmar que entendés que la URL es "
+        "pública y sin autenticación. O usá la celda 4.3, que no expone nada."
+    )
+
+# Binario de cloudflared para la VM de Colab (linux x86_64).
+if not os.path.exists("/content/cloudflared"):
+    !wget -q -O /content/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+    !chmod +x /content/cloudflared
+print(subprocess.run(["/content/cloudflared", "--version"], capture_output=True, text=True).stdout.strip())
+
+tunel_log = f"{LOGS}/cloudflared.log"
+tunel = subprocess.Popen(
+    ["/content/cloudflared", "tunnel", "--url", f"http://localhost:{ADK_PORT}", "--no-autoupdate"],
+    stdout=open(tunel_log, "w"), stderr=subprocess.STDOUT,
+)
+
+url_publica = None
+for _ in range(40):
+    time.sleep(2)
+    m = re.search(r"https://[a-z0-9-]+\.trycloudflare\.com", open(tunel_log).read())
+    if m:
+        url_publica = m.group(0)
+        break
+
+if not url_publica:
+    print("No levantó el túnel. Últimas líneas:")
+    print(open(tunel_log).read()[-1500:])
+else:
+    ui = f"{url_publica}/dev-ui/?app=planner_agent"
+    time.sleep(3)
+    import httpx
+    estado = httpx.get(f"{url_publica}/list-apps", timeout=30).text
+    print(f"\n✓ el túnel responde: {estado}")
+    print(f"\n  {ui}\n")
+    display(HTML(
+        f'<p style="font-size:1.2em"><a href="{ui}" target="_blank">🔗 Abrir la ADK Dev UI '
+        f'(URL pública)</a></p><p style="color:#b00">Apagala con la celda de Limpieza '
+        f'cuando termines.</p>'))
+""")
+
 # ---------------------------------------------------------------------------
 # Paso 4 — Pedido real
 # ---------------------------------------------------------------------------
@@ -1092,12 +1158,15 @@ Corré la última celda antes de cerrar: si no, los dos servidores quedan vivos 
 code(r'''
 # @title Limpieza — apagar los dos servidores { display-mode: "form" }
 
-for proc, nombre in [(planner, "Planner"), (simulador, "Simulator"), (globals().get("adkweb"), "ADK Dev UI")]:
+for proc, nombre in [(planner, "Planner"), (simulador, "Simulator"),
+                    (globals().get("adkweb"), "ADK Dev UI"),
+                    (globals().get("tunel"), "túnel público")]:
     frenar(proc, nombre)
 
 !pkill -f "src.planner_agent.runtime.local_server" 2>/dev/null
 !pkill -f "src.simulator_agent.runtime.local_server" 2>/dev/null
 !pkill -f "adk.*web" 2>/dev/null
+!pkill -f cloudflared 2>/dev/null
 
 import time
 time.sleep(1)
