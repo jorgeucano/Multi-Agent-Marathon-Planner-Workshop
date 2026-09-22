@@ -84,7 +84,7 @@ Modelo: `gemini-3.1-flash-lite` en los tres (elegible en el Paso 0.2). El codela
 | `gcloud auth application-default login` en la laptop | `auth.authenticate_user()`, una celda |
 | Dos terminales de Cloud Shell | Dos procesos en la misma VM, `localhost` |
 | `uv sync` en el wifi del evento | `pip install` en la VM de Google |
-| La prueba final es un `curl` al agent card | Pedido real + **ADK Dev UI** con la traza + mapa de la ruta |
+| La prueba final es un `curl` al agent card | Pedido real + **traza evento por evento** + mapa de la ruta |
 
 ### Ruta del workshop
 
@@ -93,8 +93,8 @@ Modelo: `gemini-3.1-flash-lite` en los tres (elegible en el Paso 0.2). El codela
 | 0 | Setup: auth, proyecto, dependencias, repo | ~4 min |
 | 1 | El Evaluator: 7 criterios y cómo puntúa | ~8 min |
 | 2 | La ruta: Dijkstra sobre la red vial + mapa | ~8 min |
-| 3 | Levantar los 3 agentes, conectarlos por A2A y abrir la **ADK Dev UI** | ~12 min |
-| 4 | El pedido real end-to-end (~1 min de corrida) | ~10 min |
+| 3 | Levantar los 3 agentes y conectarlos por A2A | ~10 min |
+| 4 | El pedido real + **la coreografía evento por evento** | ~12 min |
 | 5 | Matar Vertex AI Eval en vivo (fallback híbrido) | ~5 min |
 
 > 📦 Repo del workshop (tags por paso, `docs/GOTCHAS.md`, `docs/WORKSHOP.md`): ''' + REPO_URL + r'''
@@ -797,6 +797,13 @@ print("(esa URL sirve para entender el mecanismo; para USAR la UI, mirá el ifra
 # y sí carga. Ver docs/GOTCHAS.md #21.
 print("\nLa UI, acá abajo (agente `planner_agent` → escribí el pedido → panel Events):")
 output.serve_kernel_port_as_iframe(ADK_PORT, path=UI_PATH, height="700")
+
+print("\n" + "=" * 70)
+print("SI EL IFRAME QUEDA EN BLANCO: no insistas, pasá a la celda 4.3.")
+print("El proxy de Colab devuelve 403 en los chunks de JavaScript de la UI")
+print("(el HTML carga, el JS no). No es tu servidor: el health check de arriba")
+print("ya probó que responde. La 4.3 muestra la misma coreografía sin proxy.")
+print("=" * 70)
 """)
 
 # ---------------------------------------------------------------------------
@@ -877,9 +884,13 @@ for linea in sim.splitlines()[-25:]:
 ''')
 
 md(r"""
-### 4.3 — La coreografía completa, evento por evento
+### 4.3 — La coreografía completa, evento por evento ⭐
 
-Las celdas anteriores te dieron el resultado y el log. Esta te da **la película**: manda el pedido por la API de `adk web` y dibuja cada evento en orden, con quién lo originó y cuánto tardó.
+**Esta es la vista visual del workshop.** No depende del proxy de Colab ni de que
+la UI cargue: habla con la API de `adk web` desde el propio kernel, así que
+funciona siempre.
+
+Manda el pedido, transmite cada evento y dibuja la secuencia en orden, con quién lo originó y cuánto tardó.
 
 Es la vista que cierra el workshop, porque hace visible lo único que no se ve en el texto final: que hubo **tres agentes distintos**, que el Evaluator corrió *dentro* del proceso del Planner y que el Simulator contestó *por HTTP*. En la salida vas a poder señalar con el dedo el momento exacto en que el Planner deja de trabajar y delega.
 

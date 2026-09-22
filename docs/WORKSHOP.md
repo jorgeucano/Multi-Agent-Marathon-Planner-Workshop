@@ -41,12 +41,18 @@ pre-warmed fallback.
 | 18-26 | The route | `plan_marathon_route("Buenos Aires")` in a REPL: waypoints, closure severity, 42.195 km with the adjustment stated. | Offline |
 | 26-34 | Wiring | `agent/tools.py::get_tools()`: SkillToolset / AgentTool / RemoteA2aAgent side by side. Start the simulator, `curl` its agent card. | — |
 | 34-40 | One env var | Start the planner **without** the var (banner: `SOLO`), Ctrl+C, start **with** it (banner: `FULL TEAM`, 7 tools). | — |
-| 40-52 | The run | `make web` -> ADK dev UI. Type the request. Narrate the event trace while the Evaluator thinks (1-3 min). | `EVAL_MODE=heuristic` run pre-started in another tab; switch if the judge stalls past 3 min |
+| 40-52 | The run | Send the request, then the event-by-event choreography: `plan_marathon_route` at ~10 s, `evaluator_agent` at ~17 s (AgentTool, same process), `simulator_agent` at ~30 s (A2A, HTTP). ~45 s total with flash-lite. | `EVAL_MODE=heuristic` pre-started in another tab |
 | 52-57 | Break it | Kill the simulator, resend. What the planner does is in its *instruction*, not its code. | Skip if late |
 | 57-60 | Close | ThinkingConfig per task. Memory Bank is **not** demonstrated — say so. Repo + Colab link. | — |
 
 **Cut order if you run late:** 52-57 first, then compress 18-26 to a single
 slide of output.
+
+**On the projector, `adk web` is the instructor's tool, not the attendees'.**
+It works on a laptop (`make web`, http://127.0.0.1:8000). Inside Colab the port
+proxy returns 403 on the UI's JavaScript chunks, so attendees get the same
+choreography from the notebook's 4.3 cell instead — which talks to the API from
+the kernel and never touches the proxy.
 
 **Pre-warm before the room opens:** `uv sync` done, ADC valid, simulator
 running, one full request already completed once today (model cold starts and
