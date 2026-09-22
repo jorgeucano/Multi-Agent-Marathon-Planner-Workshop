@@ -18,6 +18,7 @@ dependencies = [
     "uvicorn>=0.30.0",
     "google-auth>=2.0.0",
     "pandas>=2.0.0",
+    "folium>=0.17.0,<1",
 ]
 
 [project.optional-dependencies]

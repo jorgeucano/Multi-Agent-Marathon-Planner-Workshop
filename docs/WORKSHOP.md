@@ -41,11 +41,12 @@ pre-warmed fallback.
 | 18-26 | The route | `plan_marathon_route("Buenos Aires")` in a REPL: waypoints, closure severity, 42.195 km with the adjustment stated. | Offline |
 | 26-34 | Wiring | `agent/tools.py::get_tools()`: SkillToolset / AgentTool / RemoteA2aAgent side by side. Start the simulator, `curl` its agent card. | — |
 | 34-40 | One env var | Start the planner **without** the var (banner: `SOLO`), Ctrl+C, start **with** it (banner: `FULL TEAM`, 7 tools). | — |
-| 40-52 | The run | Send the request, then the event-by-event choreography: `plan_marathon_route` at ~10 s, `evaluator_agent` at ~17 s (AgentTool, same process), `simulator_agent` at ~30 s (A2A, HTTP). ~45 s total with flash-lite. | `EVAL_MODE=heuristic` pre-started in another tab |
-| 52-57 | Break it | Kill the simulator, resend. What the planner does is in its *instruction*, not its code. | Skip if late |
-| 57-60 | Close | ThinkingConfig per task. Memory Bank is **not** demonstrated — say so. Repo + Colab link. | — |
+| 40-50 | The run | Paste the complete Buenos Aires request from cell 3.6, then show the event-by-event choreography: `plan_marathon_route`, `evaluator_agent` (AgentTool, same process), `simulator_agent` (A2A, HTTP). | `EVAL_MODE=heuristic` pre-started in another tab |
+| 50-54 | Race view | Run cell 4.4: the Planner's GeoJSON becomes an animated Buenos Aires course with runners, water and medical posts. State clearly that the moving dots are a visual sample, not Runner agents. | Static map from cell 2.2 |
+| 54-58 | Break it | Kill the simulator, resend. What the planner does is in its *instruction*, not its code. | Skip if late |
+| 58-60 | Close | ThinkingConfig per task. Memory Bank is **not** demonstrated — say so. Repo + Colab link. | — |
 
-**Cut order if you run late:** 52-57 first, then compress 18-26 to a single
+**Cut order if you run late:** 54-58 first, then compress 18-26 to a single
 slide of output.
 
 **On the projector, `adk web` is the instructor's tool, not the attendees'.**

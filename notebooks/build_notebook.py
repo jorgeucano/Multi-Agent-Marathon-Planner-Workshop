@@ -891,6 +891,28 @@ else:
             f'cuando termines.</p>'))
 """)
 
+md(r"""
+### 3.6 — Qué pedirle al Planner
+
+En la ADK Dev UI elegí `planner_agent`, abrí una sesión nueva y pegá el pedido
+completo de abajo. No le pidas solamente "una maratón en Buenos Aires": nombrar
+la distancia, el punto de largada y los dos agentes obliga a recorrer toda la
+arquitectura del workshop.
+""")
+
+code(r'''
+# @title 3.6 — Copiar este pedido en la ADK Dev UI { display-mode: "form" }
+
+PEDIDO_BUENOS_AIRES = """Plan a scenic marathon in Buenos Aires for 30,000 runners.
+
+Create a certified-distance route of 26.2 miles (42.195 km), starting and finishing at the Obelisco. Use the route-planning tool and include the calculated waypoints, hydration stations, medical tents, traffic closures, community impact, logistics, finances, timeline, and risks.
+
+Then send the complete plan to evaluator_agent for scoring and afterward to simulator_agent for the final readiness verdict. Include the evaluation scores, overall score, and simulation verdict in the final response."""
+
+print(PEDIDO_BUENOS_AIRES)
+print("\n→ Copiá este texto, volvé a la ADK Dev UI y envialo a planner_agent.")
+''')
+
 # ---------------------------------------------------------------------------
 # Paso 4 — Pedido real
 # ---------------------------------------------------------------------------
@@ -989,7 +1011,11 @@ import json, time
 import httpx
 from IPython.display import HTML, display
 
-PEDIDO = "Plan a scenic marathon in Buenos Aires for 30,000 runners. Send it to the evaluator and then to the simulation controller, and report the scores and the verdict."  # @param {type:"string"}
+PEDIDO = globals().get("PEDIDO_BUENOS_AIRES", '''Plan a scenic marathon in Buenos Aires for 30,000 runners.
+
+Create a certified-distance route of 26.2 miles (42.195 km), starting and finishing at the Obelisco. Use the route-planning tool and include the calculated waypoints, hydration stations, medical tents, traffic closures, community impact, logistics, finances, timeline, and risks.
+
+Then send the complete plan to evaluator_agent for scoring and afterward to simulator_agent for the final readiness verdict. Include the evaluation scores, overall score, and simulation verdict in the final response.''')  # @param {type:"string"}
 
 BASE = f"http://127.0.0.1:{ADK_PORT}"
 sid = httpx.post(f"{BASE}/apps/planner_agent/users/user/sessions", json={}, timeout=30).json()["id"]
@@ -1057,6 +1083,64 @@ print("PLAN FINAL")
 print("=" * 70)
 print(final)
 """)
+
+md(r"""
+### 4.4 — Buenos Aires en carrera: mapa y corredores animados 🏃
+
+La ADK Dev UI muestra la conversación y la traza técnica, no la ciudad. Esta
+celda convierte la salida determinística de `plan_marathon_route` en la vista
+del evento: circuito, landmarks, hidratación, puestos médicos y corredores
+animados.
+
+Los puntos móviles son una **muestra visual** del pelotón de 30.000 personas;
+no son 120 agentes LLM. La simulación completa del keynote usa además un
+gateway Go, Redis, WebSockets y agentes Runner. Acá mantenemos el workshop
+liviano y usamos exactamente el GeoJSON calculado por este Planner.
+""")
+
+code(r'''
+# @title 4.4 — Abrir la carrera animada de Buenos Aires { display-mode: "form" }
+
+PARTICIPANTES_VISUAL = 30000  # @param {type:"integer"}
+CORREDORES_VISUALES = 120  # @param {type:"slider", min:20, max:180, step:10}
+
+import importlib.util
+
+# Es autocontenida: funciona aunque hayas saltado el Paso 2.
+if "route_tools" not in globals():
+    spec = importlib.util.spec_from_file_location(
+        "route_tools", f"{REPO_DIR}/src/planner_agent/skills/route-planning/tools.py"
+    )
+    route_tools = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(route_tools)
+
+from src.planner_agent.visualization import build_animated_race_map
+
+ruta_visual = route_tools.plan_marathon_route(
+    "Buenos Aires", start_landmark="Obelisco", target_distance_km=42.195
+)
+agua_visual = route_tools.add_water_stations(
+    total_distance_km=42.195, participants=PARTICIPANTES_VISUAL
+)
+med_visual = route_tools.add_medical_tents(
+    total_distance_km=42.195, participants=PARTICIPANTES_VISUAL
+)
+
+print("✓ GeoJSON del Planner cargado")
+print(f"✓ {agua_visual['water_station_count']} puestos de hidratación")
+print(f"✓ {med_visual['medical_tent_count']} puestos médicos")
+print(f"✓ {CORREDORES_VISUALES} corredores animados representan {PARTICIPANTES_VISUAL:,} participantes")
+print("\nUsá Pausar, Reiniciar y 1×/2×/4× en el panel del mapa.\n")
+
+mapa_carrera = build_animated_race_map(
+    ruta_visual,
+    agua_visual,
+    med_visual,
+    participants=PARTICIPANTES_VISUAL,
+    runner_count=CORREDORES_VISUALES,
+)
+mapa_carrera
+''')
 
 # ---------------------------------------------------------------------------
 # Paso 5 — Romperlo

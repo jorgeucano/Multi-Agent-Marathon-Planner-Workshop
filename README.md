@@ -71,6 +71,13 @@ trace on the right — every `plan_marathon_route` call, the `evaluator_agent`
 sub-agent, and the A2A hop to `simulator_agent`. This is the part the room
 should see; the codelab never mentions it.
 
+The Colab workshop then adds a separate animated Buenos Aires race view built
+from the Planner's deterministic GeoJSON: route, landmarks, hydration, medical
+posts, and a controllable visual sample of the 30,000-runner field. It is a
+lightweight workshop visualization, not the keynote's full Angular/Three.js
+simulation (which also requires the Go gateway, Redis, WebSockets, and Runner
+agents from `GoogleCloudPlatform/race-condition`).
+
 ### Full Team mode — all three agents over A2A
 
 ```bash
@@ -146,10 +153,10 @@ uv run --no-project --with pytest python -m pytest tests/test_route_planning.py 
 
 `notebooks/marathon_agents_workshop.ipynb` runs the whole system on a Colab VM:
 `auth.authenticate_user()` replaces the ADC dance, both A2A servers run as
-processes on the same VM, the route is plotted on a map, and every step has a
-short explanation plus an intermediate check. Attendees need a GCP project
-with billing enabled and nothing else — the notebook's first cell lists the
-prerequisites.
+processes on the same VM, the route is plotted on an animated map with runners,
+and every step has a short explanation plus an intermediate check. Attendees
+need a GCP project with billing enabled and nothing else — the notebook's first
+cell lists the prerequisites.
 
 The notebook is generated from `notebooks/build_notebook.py` so the cells are
 reviewable source; edit the script, run it, commit both.
