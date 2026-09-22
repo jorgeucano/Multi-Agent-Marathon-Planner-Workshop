@@ -42,7 +42,7 @@ pre-warmed fallback.
 | 26-34 | Wiring | Compare SkillToolset, local AgentTool, remote A2A and the nested Runner AgentTool. Start Simulator and point out that one process contains Simulator + Runner. | — |
 | 34-40 | One env var | Start Planner without the var (`SOLO`), then with it (`FULL TEAM`). Connecting Simulator also makes Runner reachable behind that boundary. | — |
 | 40-50 | The run | Paste the Buenos Aires request from cell 3.6. Follow Planner → Evaluator and Planner → Simulator → Runner. | `EVAL_MODE=heuristic` pre-started in another tab |
-| 50-54 | Race view | Run cell 4.4: explain four cohort rows, then map color and speed to them. Moving dots are visual representatives, not one LLM each. | Static map from cell 2.2 |
+| 50-54 | Race view | Run cell 4.4 and open its second Cloudflare URL: explain four cohort rows, then map color and speed to them. Moving dots are visual representatives, not one LLM each. | Static map from cell 2.2 |
 | 54-58 | Break it | Kill the simulator, resend. What the planner does is in its *instruction*, not its code. | Skip if late |
 | 58-60 | Close | ThinkingConfig per task. Memory Bank is **not** demonstrated — say so. Repo + Colab link. | — |
 
@@ -54,6 +54,12 @@ It works on a laptop (`make web`, http://127.0.0.1:8000). Inside Colab the port
 proxy returns 403 on the UI's JavaScript chunks, so attendees get the same
 choreography from the notebook's 4.3 cell instead — which talks to the API from
 the kernel and never touches the proxy.
+
+For the full visual flow in Colab, cell 3.5 publishes the ADK UI through one
+Cloudflare Quick Tunnel and cell 4.4 publishes the animated Race View through a
+second tunnel. Keep both tabs side by side: the first shows agent decisions and
+the second shows their effect on the city and runner cohorts. The Race View is
+static; only the ADK UI can trigger model calls.
 
 **Pre-warm before the room opens:** `uv sync` done, ADC valid, simulator
 running, one full request already completed once today (model cold starts and

@@ -99,7 +99,7 @@ def main() -> int:
             check(f"{var} = {model}", WARN, "skipped - no project set")
 
     # 6. Ports free
-    for name, port in (("planner", 8084), ("simulator", 8089)):
+    for name, port in (("planner", 8084), ("simulator", 8089), ("race view", 8010)):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.settimeout(0.4)
             busy = s.connect_ex(("127.0.0.1", port)) == 0

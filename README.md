@@ -80,12 +80,18 @@ individuales. Color, velocidad, tabla y reloj consumen los mismos resultados.
 4. Ejecutá el Paso 3 para levantar Simulator, Planner y la ADK Dev UI.
 5. Abrí la URL de Cloudflare generada por la celda 3.5.
 6. Pegá el pedido completo de la celda 3.6 en `planner_agent`.
-7. Usá 4.3 para explicar la coreografía y 4.4 para mostrar cohortes y mapa.
+7. Usá 4.3 para explicar la coreografía.
+8. Ejecutá 4.4 y abrí la segunda URL de Cloudflare para mostrar la Race View.
 
 > La URL `*.colab.dev` puede abrir la página pero devolver `403` para los bundles
 > JavaScript de ADK. No es un error de los agentes. La celda 3.5 crea el túnel
-> Cloudflare que evita ese proxy; el mapa de 4.4 se renderiza directamente en el
-> notebook y no depende de la Dev UI.
+> Cloudflare que evita ese proxy. La celda 4.4 aplica el mismo patrón: sirve el
+> mapa en el puerto 8010 y crea un segundo túnel. La ADK UI muestra decisiones;
+> la Race View muestra ciudad, servicios y cohortes en movimiento.
+
+Las dos URLs son efímeras. La URL de la ADK UI permite enviar prompts y consumir
+cuota de Vertex AI, por lo que no debe compartirse. La Race View es una página
+estática de solo lectura. La celda final de limpieza apaga servidores y túneles.
 
 ### Pedido completo para la demostración
 

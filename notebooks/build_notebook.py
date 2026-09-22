@@ -870,14 +870,15 @@ print("=" * 70)
 """)
 
 md(r"""
-### 3.5 — Plan B para la UI: túnel público opcional
+### 3.5 — Acceso público funcional: túnel para la UI
 
 Si el iframe de la 3.4 quedó en blanco, el problema es el proxy de Colab: devuelve
 `403` en los chunks de JavaScript de la interfaz. El HTML llega, el JS no.
 
 Un túnel evita el proxy por completo: expone el puerto 8000 de la VM en una URL
-pública propia. El hostname nuevo puede tardar varios segundos en propagarse;
-la celda espera DNS y HTTP antes de mostrar el enlace.
+pública propia. Esta misma infraestructura se reutiliza en 4.4 para publicar la
+vista animada de la carrera en una **segunda URL**. Así la conversación técnica
+y la ciudad en movimiento se abren de la misma manera y fuera del proxy roto.
 
 > ⚠️ **Esa URL es pública y sin autenticación.** Cualquiera que la tenga puede
 > usar tu agente y gastar tu cuota de Vertex AI. Es aleatoria y efímera, pero
@@ -887,11 +888,11 @@ la celda espera DNS y HTTP antes de mostrar el enlace.
 """)
 
 code(r"""
-# @title 3.5 — Túnel público a la UI (opcional) { display-mode: "form" }
+# @title 3.5 — Túnel público a la ADK Dev UI { display-mode: "form" }
 
 ENTIENDO_QUE_ES_PUBLICO = False  # @param {type:"boolean"}
 
-import re, socket, subprocess, time
+import httpx, os, re, socket, subprocess, time
 from urllib.parse import urlparse
 from IPython.display import HTML, display
 
@@ -907,63 +908,65 @@ if not os.path.exists("/content/cloudflared"):
     !chmod +x /content/cloudflared
 print(subprocess.run(["/content/cloudflared", "--version"], capture_output=True, text=True).stdout.strip())
 
-tunel_log = f"{LOGS}/cloudflared.log"
-tunel = subprocess.Popen(
-    ["/content/cloudflared", "tunnel", "--url", f"http://localhost:{ADK_PORT}", "--no-autoupdate"],
-    stdout=open(tunel_log, "w"), stderr=subprocess.STDOUT,
-)
-
-url_publica = None
-for _ in range(40):
-    time.sleep(2)
-    m = re.search(r"https://[a-z0-9-]+\.trycloudflare\.com", open(tunel_log).read())
-    if m:
-        url_publica = m.group(0)
-        break
-
-if not url_publica:
-    print("No levantó el túnel. Últimas líneas:")
-    print(open(tunel_log).read()[-1500:])
-else:
-    ui = f"{url_publica}/dev-ui/?app=planner_agent"
-    import httpx
-    host = urlparse(url_publica).hostname
-    estado = None
-    ultimo_error = None
-
-    # cloudflared imprime la URL antes de que el registro DNS necesariamente
-    # esté visible. Esperamos resolución y una respuesta HTTP válida.
-    for intento in range(30):
-        if tunel.poll() is not None:
-            ultimo_error = RuntimeError(
-                f"cloudflared terminó con código {tunel.returncode}"
-            )
+def abrir_tunel_cloudflare(puerto, nombre, ruta_salud, archivo_log):
+    # No retorna hasta comprobar tanto la resolución DNS como la respuesta HTTP.
+    proceso = subprocess.Popen(
+        ["/content/cloudflared", "tunnel", "--url", f"http://localhost:{puerto}", "--no-autoupdate"],
+        stdout=open(archivo_log, "w"), stderr=subprocess.STDOUT,
+    )
+    url = None
+    for _ in range(40):
+        time.sleep(2)
+        match = re.search(
+            r"https://[a-z0-9-]+\.trycloudflare\.com",
+            open(archivo_log).read(),
+        )
+        if match:
+            url = match.group(0)
             break
+    if not url:
+        proceso.terminate()
+        raise RuntimeError(
+            f"No levantó el túnel de {nombre}. Log:\n{open(archivo_log).read()[-2000:]}"
+        )
+
+    host = urlparse(url).hostname
+    ultimo_error = None
+    for intento in range(30):
+        if proceso.poll() is not None:
+            raise RuntimeError(
+                f"cloudflared para {nombre} terminó con código {proceso.returncode}.\n"
+                f"{open(archivo_log).read()[-2000:]}"
+            )
         try:
             socket.getaddrinfo(host, 443)
             respuesta = httpx.get(
-                f"{url_publica}/list-apps", timeout=15, follow_redirects=True
+                f"{url}{ruta_salud}", timeout=15, follow_redirects=True
             )
             respuesta.raise_for_status()
-            estado = respuesta.text
-            break
+            print(f"✓ túnel de {nombre}: HTTP {respuesta.status_code}")
+            return proceso, url, respuesta.text
         except (OSError, httpx.HTTPError) as error:
             ultimo_error = error
-            print(f"Esperando túnel/DNS ({intento + 1}/30): {type(error).__name__}")
+            print(f"Esperando {nombre}/DNS ({intento + 1}/30): {type(error).__name__}")
             time.sleep(3)
+    proceso.terminate()
+    raise RuntimeError(f"El túnel de {nombre} no respondió: {ultimo_error!r}")
 
-    if estado is None:
-        print(f"\nEl túnel no quedó disponible: {ultimo_error!r}")
-        print("Últimas líneas de cloudflared:")
-        print(open(tunel_log).read()[-3000:])
-        print("\nUsá la celda 4.3: no depende del proxy ni expone una URL pública.")
-    else:
-        print(f"\n✓ el túnel responde: {estado}")
-        print(f"\n  {ui}\n")
-        display(HTML(
-            f'<p style="font-size:1.2em"><a href="{ui}" target="_blank">🔗 Abrir la ADK Dev UI '
-            f'(URL pública)</a></p><p style="color:#b00">Apagala con la celda de Limpieza '
-            f'cuando termines.</p>'))
+tunel_log = f"{LOGS}/cloudflared-ui.log"
+tunel_anterior = globals().get("tunel")
+if tunel_anterior and tunel_anterior.poll() is None:
+    tunel_anterior.terminate()
+    tunel_anterior.wait(timeout=5)
+tunel, url_publica, estado = abrir_tunel_cloudflare(
+    ADK_PORT, "ADK Dev UI", "/list-apps", tunel_log
+)
+ui = f"{url_publica}/dev-ui/?app=planner_agent"
+print(f"\n  {ui}\n")
+display(HTML(
+    f'<p style="font-size:1.2em"><a href="{ui}" target="_blank">🔗 Abrir la ADK Dev UI '
+    f'(túnel público)</a></p><p style="color:#b00">No compartas esta URL. La celda '
+    f'de Limpieza apaga este túnel y el de la carrera.</p>'))
 """)
 
 md(r"""
@@ -1177,7 +1180,7 @@ print(final)
 """)
 
 md(r"""
-### 4.4 — Buenos Aires en carrera: mapa y corredores animados 🏃
+### 4.4 — Buenos Aires en carrera: vista publicada por túnel 🏃
 
 La ADK Dev UI muestra conversación y trazas, no la ciudad. Esta celda une dos
 resultados verificables:
@@ -1196,6 +1199,17 @@ La simulación completa del keynote sí agrega gateway Go, Redis, WebSockets y
 muchos agentes Runner. Acá usamos **un Runner Agent de cohortes**: es real como
 frontera de delegación, pero barato y explicable para un workshop.
 
+La celda guarda esta visualización como una página web, levanta un servidor
+estático en el puerto 8010 y crea otro Quick Tunnel. Al terminar tenés dos
+pestañas para presentar:
+
+- **ADK Dev UI:** conversación, tools y delegaciones.
+- **Race View:** ciudad, circuito, servicios y cohortes corriendo.
+
+La Race View también es pública mientras la celda esté activa, pero es estática:
+no permite enviar prompts ni consumir Vertex AI. La celda de Limpieza apaga
+ambos túneles.
+
 > **Guion para explicar:** “Primero vemos decisiones en el trace; ahora vemos
 > consecuencias sobre personas. El Planner piensa en el evento. El Runner piensa
 > en cómo ese evento se siente kilómetro a kilómetro.”
@@ -1207,7 +1221,7 @@ code(r'''
 PARTICIPANTES_VISUAL = 30000  # @param {type:"integer"}
 CORREDORES_VISUALES = 120  # @param {type:"slider", min:20, max:180, step:10}
 
-import importlib.util
+import importlib.util, os, subprocess, sys
 
 # Es autocontenida: funciona aunque hayas saltado el Paso 2.
 if "route_tools" not in globals():
@@ -1267,7 +1281,42 @@ mapa_carrera = build_animated_race_map(
     runner_count=CORREDORES_VISUALES,
     cohort_results=reporte_corredores["cohorts"],
 )
-mapa_carrera
+
+# La vista final usa la misma vía que sí funcionó para la UI: servidor HTTP +
+# Cloudflare Quick Tunnel. Exigimos haber aceptado el aviso de la celda 3.5.
+if not globals().get("ENTIENDO_QUE_ES_PUBLICO") or "abrir_tunel_cloudflare" not in globals():
+    raise SystemExit("Primero ejecutá la celda 3.5 y aceptá el aviso del túnel público.")
+
+RACE_VIEW_PORT = 8010
+RACE_VIEW_DIR = "/content/marathon-race-view"
+os.makedirs(RACE_VIEW_DIR, exist_ok=True)
+mapa_carrera.save(f"{RACE_VIEW_DIR}/index.html")
+
+for proceso_anterior in (globals().get("race_server"), globals().get("race_tunnel")):
+    if proceso_anterior and proceso_anterior.poll() is None:
+        proceso_anterior.terminate()
+        proceso_anterior.wait(timeout=5)
+
+race_server_log = f"{LOGS}/race-view.log"
+race_server = subprocess.Popen(
+    [sys.executable, "-m", "http.server", str(RACE_VIEW_PORT),
+     "--bind", "0.0.0.0", "--directory", RACE_VIEW_DIR],
+    stdout=open(race_server_log, "w"), stderr=subprocess.STDOUT,
+)
+if not esperar_puerto(RACE_VIEW_PORT, "Race View", race_server_log, segundos=30):
+    raise SystemExit("La vista de carrera no pudo levantar su servidor HTTP.")
+
+race_tunnel, race_url, _ = abrir_tunel_cloudflare(
+    RACE_VIEW_PORT, "Race View", "/", f"{LOGS}/cloudflared-race.log"
+)
+print(f"\n✓ Race View publicada:\n  {race_url}\n")
+display(HTML(
+    f'<div style="padding:14px;border:1px solid #ddd;border-radius:12px;margin:8px 0">'
+    f'<a href="{race_url}" target="_blank" style="font-size:1.25em;font-weight:700">'
+    f'🏃 Abrir Buenos Aires Race View</a><br>'
+    f'<span style="color:#666">Abrila junto a la ADK Dev UI para mostrar decisiones y carrera.</span>'
+    f'</div><iframe src="{race_url}" width="100%" height="720" '
+    f'style="border:0;border-radius:12px" allowfullscreen></iframe>'))
 ''')
 
 # ---------------------------------------------------------------------------
@@ -1403,16 +1452,31 @@ Corré la última celda antes de cerrar: si no, los dos servidores quedan vivos 
 ''')
 
 code(r'''
-# @title Limpieza — apagar los dos servidores { display-mode: "form" }
+# @title Limpieza — apagar servidores y túneles { display-mode: "form" }
 
-for proc, nombre in [(planner, "Planner"), (simulador, "Simulator"),
+import signal, subprocess
+
+def detener_proceso(proc, nombre):
+    if proc and proc.poll() is None:
+        proc.send_signal(signal.SIGINT)
+        try:
+            proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+        print(f"· {nombre} detenido")
+
+for proc, nombre in [(globals().get("planner"), "Planner"),
+                    (globals().get("simulador"), "Simulator"),
                     (globals().get("adkweb"), "ADK Dev UI"),
-                    (globals().get("tunel"), "túnel público")]:
-    frenar(proc, nombre)
+                    (globals().get("tunel"), "túnel público de UI"),
+                    (globals().get("race_server"), "servidor Race View"),
+                    (globals().get("race_tunnel"), "túnel público de Race View")]:
+    detener_proceso(proc, nombre)
 
 !pkill -f "src.planner_agent.runtime.local_server" 2>/dev/null
 !pkill -f "src.simulator_agent.runtime.local_server" 2>/dev/null
 !pkill -f "adk.*web" 2>/dev/null
+!pkill -f "http.server 8010" 2>/dev/null
 !pkill -f cloudflared 2>/dev/null
 
 import time
@@ -1420,6 +1484,7 @@ time.sleep(1)
 print(f"\nPuerto 8084 vivo: {puerto_vivo(8084)}")
 print(f"Puerto 8000 vivo: {puerto_vivo(8000)}")
 print(f"Puerto 8089 vivo: {puerto_vivo(8089)}")
+print(f"Puerto 8010 vivo: {puerto_vivo(8010)}")
 print("\nNo hay nada más que borrar: este workshop no crea recursos persistentes")
 print("en Google Cloud (ni Cloud Run, ni Agent Engine). Solo llamadas a la API.")
 print("La VM de Colab se libera sola cuando cerrás la sesión.")

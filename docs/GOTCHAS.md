@@ -328,6 +328,11 @@ guaranteed path because it talks to the API from the kernel.
 Cell 3.5 is an optional public Quick Tunnel. `cloudflared` may print its
 `trycloudflare.com` URL before the hostname resolves, so the notebook retries
 DNS and `/list-apps` instead of assuming a fixed three-second delay is enough.
+The helper created there is reused by cell 4.4: the animated map is saved as a
+standalone page, served on port 8010 and exposed through a second Quick Tunnel.
+This keeps both workshop views on the access path that works reliably in Colab.
+The UI tunnel is interactive and can spend Vertex quota; the Race View tunnel
+is a read-only static page. The cleanup cell terminates both.
 
 ### 22. "Already cloned, skipping" is a silent trap
 
