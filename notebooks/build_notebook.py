@@ -563,7 +563,7 @@ if plan_marathon_route_func:
 
 Es el bug más instructivo de todo el codelab: **una tool que falta en silencio no se ve como un error, se ve como una alucinación.** Cuando un agente invente datos, la primera pregunta no es "¿qué modelo uso?" sino "¿la tool está realmente cargada?".
 
-En este repo el archivo existe: red vial por ciudad, Dijkstra, cierre de loop sobre los 42.195 km y GeoJSON de salida.
+En este repo el archivo existe: red vial por ciudad, loop escénico ordenado para Buenos Aires, Dijkstra para las demás ciudades y GeoJSON de salida.
 
 Cuando ejecutes 2.1, señalá tres datos: `network_source` demuestra de dónde salió
 la red; `raw_network_distance_km` es la distancia realmente recorrida sobre el
@@ -572,7 +572,7 @@ grafo; `course_adjustment_km` hace explícito el pequeño ajuste para certificar
 ''')
 
 code(r'''
-# @title 2.1 — Calcular la ruta (Dijkstra, sin LLM) { display-mode: "form" }
+# @title 2.1 — Calcular la ruta (tool determinística, sin LLM) { display-mode: "form" }
 
 CIUDAD = "Buenos Aires"  # @param ["Buenos Aires", "Las Vegas", "Austin", "Tokyo"]
 
@@ -1106,11 +1106,16 @@ import json, time
 import httpx
 from IPython.display import HTML, display
 
-PEDIDO = globals().get("PEDIDO_BUENOS_AIRES", '''Plan a scenic marathon in Buenos Aires for 30,000 runners.
+PEDIDO = ""  # @param {type:"string"}
+
+# El formulario de Colab solo admite valores simples en la línea @param.
+# Si el campo queda vacío, reutilizamos el pedido completo del paso 3.6.
+PEDIDO_PREDETERMINADO = '''Plan a scenic marathon in Buenos Aires for 30,000 runners.
 
 Create a certified-distance route of 26.2 miles (42.195 km), starting and finishing at the Obelisco. Use the route-planning tool and include the calculated waypoints, hydration stations, medical tents, traffic closures, community impact, logistics, finances, timeline, and risks.
 
-Then send the complete plan to evaluator_agent for scoring and afterward to simulator_agent for the final readiness verdict. Ask simulator_agent to delegate runner experience to runner_agent for elite, competitive, main-pack, and back-of-pack cohorts. Include the evaluation scores, overall score, simulation verdict, runner readiness, and runner findings in the final response.''')  # @param {type:"string"}
+Then send the complete plan to evaluator_agent for scoring and afterward to simulator_agent for the final readiness verdict. Ask simulator_agent to delegate runner experience to runner_agent for elite, competitive, main-pack, and back-of-pack cohorts. Include the evaluation scores, overall score, simulation verdict, runner readiness, and runner findings in the final response.'''
+PEDIDO = PEDIDO.strip() or globals().get("PEDIDO_BUENOS_AIRES") or PEDIDO_PREDETERMINADO
 
 BASE = f"http://127.0.0.1:{ADK_PORT}"
 sid = httpx.post(f"{BASE}/apps/planner_agent/users/user/sessions", json={}, timeout=30).json()["id"]

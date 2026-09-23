@@ -56,6 +56,18 @@ def test_geojson_is_wellformed(rt):
         assert -90 <= lat <= 90
 
 
+def test_buenos_aires_is_a_single_direction_scenic_loop(rt):
+    route = rt.plan_marathon_route("Buenos Aires", start_landmark="Obelisco")
+    middle = route["waypoints"][:-1]
+
+    assert route["waypoints"][0] == route["waypoints"][-1] == "Obelisco"
+    assert len(middle) == len(set(middle)), "the course must not revisit landmarks"
+    assert abs(route["raw_network_distance_km"] - 42.195) < 0.25
+    assert middle.index("La Boca") < middle.index("Caballito")
+    assert middle.index("Caballito") < middle.index("Vicente Lopez")
+    assert middle.index("Vicente Lopez") < middle.index("Recoleta")
+
+
 def test_water_stations_scale_with_the_field(rt):
     small = rt.add_water_stations(participants=5000)
     big = rt.add_water_stations(participants=30000)

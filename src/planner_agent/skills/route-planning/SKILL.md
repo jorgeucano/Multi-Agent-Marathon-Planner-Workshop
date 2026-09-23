@@ -1,7 +1,7 @@
 ---
 name: route-planning
 description:
-  Generates high-fidelity marathon routes using road network data (Dijkstra's algorithm)
+  Generates high-fidelity marathon routes using ordered scenic loops and Dijkstra
   and outputting GeoJSON for visualization.
 ---
 
@@ -11,7 +11,7 @@ description:
 
 ## Capabilities
 
-- **Automated Route Generation**: Uses a built-in road network and Dijkstra's algorithm to calculate a certified 42.195 km route between specified landmarks.
+- **Automated Route Generation**: Uses a built-in road network. Curated showcase cities can define a single-direction scenic loop; the generic planner uses Dijkstra between landmarks.
 - **GeoJSON Output**: Returns a standards-compliant GeoJSON FeatureCollection.
 
 ## Resources

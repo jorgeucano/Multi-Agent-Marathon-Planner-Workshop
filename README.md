@@ -53,7 +53,7 @@ del otro lado de esa frontera, dentro del proceso del Simulator.
 ### Qué ocurre cuando enviás un pedido
 
 1. El Planner identifica ciudad, cantidad de participantes y restricciones.
-2. `plan_marathon_route` calcula una ruta real sobre el grafo vial y devuelve GeoJSON.
+2. `plan_marathon_route` calcula el circuito sobre el grafo vial y devuelve GeoJSON. Buenos Aires usa un loop escénico ordenado, sin contraflujos; las demás ciudades usan Dijkstra.
 3. Las herramientas determinísticas agregan hidratación y puestos médicos.
 4. El Planner completa tráfico, comunidad, logística, finanzas, cronograma y riesgos.
 5. El Evaluator aplica siete rúbricas y devuelve scores comparables.

@@ -94,29 +94,54 @@ CITY_NETWORKS: dict[str, dict[str, Any]] = {
     "buenos aires": {
         "nodes": {
             "Obelisco": (-34.6037, -58.3816),
-            "Puerto Madero": (-34.6110, -58.3630),
-            "Reserva Ecologica": (-34.6120, -58.3520),
-            "La Boca": (-34.6345, -58.3630),
-            "San Telmo": (-34.6210, -58.3730),
             "Plaza de Mayo": (-34.6083, -58.3712),
-            "Recoleta": (-34.5875, -58.3930),
+            "Puerto Madero": (-34.6110, -58.3630),
+            "Reserva Ecologica Sur": (-34.6215, -58.3505),
+            "La Boca": (-34.6345, -58.3630),
+            "Parque Lezama": (-34.6262, -58.3697),
+            "Parque Patricios": (-34.6374, -58.4017),
+            "Caballito": (-34.6180, -58.4420),
+            "Villa Crespo": (-34.5960, -58.4400),
+            "Palermo Soho": (-34.5870, -58.4300),
             "Palermo Bosques": (-34.5720, -58.4160),
-            "Planetario": (-34.5690, -58.4120),
             "Barrancas de Belgrano": (-34.5600, -58.4500),
+            "Estadio Monumental": (-34.5453, -58.4498),
+            "Vicente Lopez": (-34.5190, -58.4780),
+            "Costanera Norte": (-34.5480, -58.4340),
+            "Aeroparque": (-34.5580, -58.4160),
+            "Planetario": (-34.5690, -58.4120),
+            "Floralis Generica": (-34.5817, -58.3932),
+            "Recoleta": (-34.5875, -58.3930),
         },
         "edges": [
             ("Obelisco", "Plaza de Mayo", "boulevard"),
             ("Plaza de Mayo", "Puerto Madero", "boulevard"),
-            ("Puerto Madero", "Reserva Ecologica", "trail"),
-            ("Reserva Ecologica", "La Boca", "arterial"),
-            ("La Boca", "San Telmo", "street"),
-            ("San Telmo", "Plaza de Mayo", "street"),
-            ("Obelisco", "Recoleta", "boulevard"),
-            ("Recoleta", "Palermo Bosques", "boulevard"),
-            ("Palermo Bosques", "Planetario", "trail"),
-            ("Planetario", "Barrancas de Belgrano", "arterial"),
-            ("Barrancas de Belgrano", "Palermo Bosques", "arterial"),
-            ("Recoleta", "Puerto Madero", "arterial"),
+            ("Puerto Madero", "Reserva Ecologica Sur", "trail"),
+            ("Reserva Ecologica Sur", "La Boca", "arterial"),
+            ("La Boca", "Parque Lezama", "street"),
+            ("Parque Lezama", "Parque Patricios", "arterial"),
+            ("Parque Patricios", "Caballito", "arterial"),
+            ("Caballito", "Villa Crespo", "boulevard"),
+            ("Villa Crespo", "Palermo Soho", "street"),
+            ("Palermo Soho", "Palermo Bosques", "boulevard"),
+            ("Palermo Bosques", "Barrancas de Belgrano", "arterial"),
+            ("Barrancas de Belgrano", "Estadio Monumental", "boulevard"),
+            ("Estadio Monumental", "Vicente Lopez", "arterial"),
+            ("Vicente Lopez", "Costanera Norte", "arterial"),
+            ("Costanera Norte", "Aeroparque", "boulevard"),
+            ("Aeroparque", "Planetario", "boulevard"),
+            ("Planetario", "Floralis Generica", "boulevard"),
+            ("Floralis Generica", "Recoleta", "street"),
+            ("Recoleta", "Obelisco", "boulevard"),
+        ],
+        # Ordered clockwise so the workshop map reads as one continuous lap.
+        "preferred_loop": [
+            "Obelisco", "Plaza de Mayo", "Puerto Madero",
+            "Reserva Ecologica Sur", "La Boca", "Parque Lezama",
+            "Parque Patricios", "Caballito", "Villa Crespo",
+            "Palermo Soho", "Palermo Bosques", "Barrancas de Belgrano",
+            "Estadio Monumental", "Vicente Lopez", "Costanera Norte",
+            "Aeroparque", "Planetario", "Floralis Generica", "Recoleta",
         ],
     },
 }
@@ -248,54 +273,60 @@ def plan_marathon_route(
 
     start = start_landmark if start_landmark in nodes else landmarks[0]
 
-    # Greedily chain landmarks, always hopping to the nearest unvisited one,
-    # until we are close enough to the target that closing the loop lands on it.
-    route: list[str] = [start]
-    total_km = 0.0
-    visited = {start}
-    current = start
+    preferred_loop = network.get("preferred_loop")
+    if preferred_loop and start in preferred_loop:
+        # Rotate without changing direction when another start line is chosen.
+        start_index = preferred_loop.index(start)
+        route = preferred_loop[start_index:] + preferred_loop[:start_index] + [start]
+        total_km = sum(
+            _haversine_km(nodes[a], nodes[b]) for a, b in zip(route, route[1:])
+        )
+    else:
+        # Greedily chain landmarks, always hopping to the nearest unvisited one,
+        # until we are close enough to the target that closing the loop lands on it.
+        route = [start]
+        total_km = 0.0
+        visited = {start}
+        current = start
 
-    while total_km < target_distance_km:
-        dist, prev = _dijkstra(graph, nodes, current)
-        candidates = [
-            (d, n) for n, d in dist.items()
-            if n not in visited and d != math.inf and d > 0
-        ]
-        if not candidates:
-            visited = {current}  # allow a second lap over the network
+        while total_km < target_distance_km:
+            dist, prev = _dijkstra(graph, nodes, current)
             candidates = [
-                (d, n) for n, d in dist.items() if d != math.inf and d > 0
+                (d, n) for n, d in dist.items()
+                if n not in visited and d != math.inf and d > 0
             ]
             if not candidates:
+                visited = {current}  # allow a second lap over the network
+                candidates = [
+                    (d, n) for n, d in dist.items() if d != math.inf and d > 0
+                ]
+                if not candidates:
+                    break
+            remaining = target_distance_km - total_km
+            candidates.sort(
+                key=lambda c: abs(remaining - c[0]) if c[0] <= remaining else c[0] - remaining
+            )
+            chosen = None
+            for hop_km, nxt in candidates:
+                close_km = _dijkstra(graph, nodes, nxt)[0].get(start, math.inf)
+                projected = total_km + hop_km + (0.0 if close_km == math.inf else close_km)
+                if projected <= target_distance_km * 1.06:
+                    chosen = (hop_km, nxt)
+                    break
+            if chosen is None:
                 break
-        remaining = target_distance_km - total_km
-        # Prefer the hop that leaves the loop-closing leg closest to target,
-        # and only take it if the loop can still be closed without overshooting
-        # the certified distance by more than the 6% measurement margin.
-        candidates.sort(
-            key=lambda c: abs(remaining - c[0]) if c[0] <= remaining else c[0] - remaining
-        )
-        chosen = None
-        for hop_km, nxt in candidates:
-            close_km = _dijkstra(graph, nodes, nxt)[0].get(start, math.inf)
-            projected = total_km + hop_km + (0.0 if close_km == math.inf else close_km)
-            if projected <= target_distance_km * 1.06:
-                chosen = (hop_km, nxt)
-                break
-        if chosen is None:
-            break
-        hop_km, nxt = chosen
-        leg = _path(prev, current, nxt)
-        route.extend(leg[1:])
-        total_km += hop_km
-        visited.add(nxt)
-        current = nxt
+            hop_km, nxt = chosen
+            leg = _path(prev, current, nxt)
+            route.extend(leg[1:])
+            total_km += hop_km
+            visited.add(nxt)
+            current = nxt
 
-    # Close the loop back to the start line.
-    dist, prev = _dijkstra(graph, nodes, current)
-    if dist.get(start, math.inf) != math.inf and current != start:
-        route.extend(_path(prev, current, start)[1:])
-        total_km += dist[start]
+        # Close the loop back to the start line.
+        dist, prev = _dijkstra(graph, nodes, current)
+        if dist.get(start, math.inf) != math.inf and current != start:
+            route.extend(_path(prev, current, start)[1:])
+            total_km += dist[start]
 
     # Scale the reported distance onto the certified marathon distance: a real
     # course is measured and adjusted with out-and-back sections. We report the
